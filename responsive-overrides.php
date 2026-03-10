@@ -16,7 +16,6 @@
 if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly.
 }
- 
 
 function enqueue_themeplix_block_editor() {
 	$asset_file = __DIR__ . '/build/themeplix-block-editor.asset.php';
@@ -58,6 +57,30 @@ function add_responsive_attributes( $settings, $metadata ) {
 	return $settings;
 }
 add_filter( 'block_type_metadata_settings', 'add_responsive_attributes', 10, 2 );
+
+/**
+ * Get responsive breakpoint widths matching Gutenberg editor device preview.
+ *
+ * @return array<string, int> Map of device to max-width in pixels.
+ */
+function ro_get_responsive_breakpoints() {
+	/**
+	 * Filter responsive breakpoint widths.
+	 *
+	 * Default values match Gutenberg's editor device preview breakpoints:
+	 * - tablet: 1024px and below
+	 * - mobile: 781px and below
+	 *
+	 * @param array $breakpoints Map of device to max-width in pixels.
+	 */
+	return apply_filters(
+		'responsive_overrides_breakpoints',
+		array(
+			'tablet' => 780,
+			'mobile' => 480,
+		)
+	);
+}
 
 /**
  * Convert Gutenberg's internal var:preset|…|… notation to a CSS custom property.
@@ -179,6 +202,7 @@ function ro_render_responsive_group_spacing( $block_content, $block ) {
 
 	$updated_content = $processor->get_updated_html();
 	$css_parts       = array();
+	$breakpoints     = ro_get_responsive_breakpoints();
 
 	// Desktop base rule.
 	if ( ! empty( $desktop_declarations ) ) {
@@ -194,7 +218,12 @@ function ro_render_responsive_group_spacing( $block_content, $block ) {
 		foreach ( $tablet_declarations as $property => $value ) {
 			$decl .= $property . ':' . $value . ';';
 		}
-		$css_parts[] = '@media (max-width:1024px){.' . $class_name . '{' . $decl . '}}';
+		$css_parts[] = sprintf(
+			'@media (max-width:%dpx){.%s{%s}}',
+			$breakpoints['tablet'],
+			$class_name,
+			$decl
+		);
 	}
 
 	if ( ! empty( $mobile_declarations ) ) {
@@ -202,7 +231,12 @@ function ro_render_responsive_group_spacing( $block_content, $block ) {
 		foreach ( $mobile_declarations as $property => $value ) {
 			$decl .= $property . ':' . $value . ';';
 		}
-		$css_parts[] = '@media (max-width:781px){.' . $class_name . '{' . $decl . '}}';
+		$css_parts[] = sprintf(
+			'@media (max-width:%dpx){.%s{%s}}',
+			$breakpoints['mobile'],
+			$class_name,
+			$decl
+		);
 	}
 
 	if ( empty( $css_parts ) ) {
