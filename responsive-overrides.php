@@ -77,6 +77,25 @@ function add_responsive_attributes( $settings, $metadata ) {
 add_filter( 'block_type_metadata_settings', 'add_responsive_attributes', 10, 2 );
 
 /**
+ * Convert Gutenberg's internal var:preset|…|… notation to a CSS custom property.
+ *
+ * E.g. "var:preset|spacing|medium" → "var(--wp--preset--spacing--medium)"
+ *
+ * @param string $value Raw attribute value.
+ * @return string Resolved CSS value.
+ */
+function ro_resolve_preset_value( $value ) {
+	if ( 0 !== strpos( $value, 'var:' ) ) {
+		return $value;
+	}
+
+	$slug = substr( $value, 4 ); // strip leading "var:"
+	$slug = str_replace( '|', '--', $slug );
+
+	return 'var(--wp--' . $slug . ')';
+}
+
+/**
  * Build a safe CSS spacing declaration map from a device entry in responsiveStyles.
  *
  * Expected format: { "padding": { "top": "20px", "right": "10px", … } }
@@ -107,13 +126,13 @@ function ro_get_device_spacing_declarations( $device_data ) {
 			continue;
 		}
 
-		$value = trim( $padding[ $side ] );
+		$value = ro_resolve_preset_value( trim( $padding[ $side ] ) );
 		if ( '' === $value ) {
 			continue;
 		}
 
-		// Allow only safe CSS length values.
-		if ( ! preg_match( '/^-?(?:\\d+|\\d*\\.\\d+)(?:px|em|rem|vw|vh|%)$|^0$|^var\(--/', $value ) ) {
+		// Allow only safe CSS length values and var() custom properties.
+		if ( ! preg_match( '/^-?(?:\\d+|\\d*\\.\\d+)(?:px|em|rem|vw|vh|%)$|^0$|^var\(--[\w-]+/', $value ) ) {
 			continue;
 		}
 
@@ -140,10 +159,12 @@ function ro_render_responsive_group_spacing( $block_content, $block ) {
 		return $block_content;
 	}
 
-	$tablet_declarations = ro_get_device_spacing_declarations( $attrs['responsiveStyles']['tablet'] ?? array() );
-	$mobile_declarations = ro_get_device_spacing_declarations( $attrs['responsiveStyles']['mobile'] ?? array() );
+	$desktop_declarations = ro_get_device_spacing_declarations( $attrs['responsiveStyles']['desktop'] ?? array() );
+	$tablet_declarations  = ro_get_device_spacing_declarations( $attrs['responsiveStyles']['tablet'] ?? array() );
+	$mobile_declarations  = ro_get_device_spacing_declarations( $attrs['responsiveStyles']['mobile'] ?? array() );
 
-	if ( empty( $tablet_declarations ) && empty( $mobile_declarations ) ) {
+	// Nothing responsive to do.
+	if ( empty( $desktop_declarations ) && empty( $tablet_declarations ) && empty( $mobile_declarations ) ) {
 		return $block_content;
 	}
 
@@ -157,15 +178,40 @@ function ro_render_responsive_group_spacing( $block_content, $block ) {
 	$class_name = 'ro-rsp-' . (string) $instance;
 	$processor->add_class( $class_name );
 
+	// Strip inline padding so our CSS rules are the sole authority.
+	$existing_style = $processor->get_attribute( 'style' );
+	if ( is_string( $existing_style ) ) {
+		$cleaned_style = preg_replace(
+			'/padding-(top|right|bottom|left)\s*:[^;]*;?/',
+			'',
+			$existing_style
+		);
+		$cleaned_style = trim( $cleaned_style, ' ;' );
+		if ( $cleaned_style ) {
+			$processor->set_attribute( 'style', $cleaned_style );
+		} else {
+			$processor->remove_attribute( 'style' );
+		}
+	}
+
 	$updated_content = $processor->get_updated_html();
-	$css_parts      = array();
+	$css_parts       = array();
+
+	// Desktop base rule.
+	if ( ! empty( $desktop_declarations ) ) {
+		$decl = '';
+		foreach ( $desktop_declarations as $property => $value ) {
+			$decl .= $property . ':' . $value . ';';
+		}
+		$css_parts[] = '.' . $class_name . '{' . $decl . '}';
+	}
 
 	if ( ! empty( $tablet_declarations ) ) {
 		$decl = '';
 		foreach ( $tablet_declarations as $property => $value ) {
 			$decl .= $property . ':' . $value . ';';
 		}
-		$css_parts[] = '@media (min-width:782px) and (max-width:1024px){.' . $class_name . '{' . $decl . '}}';
+		$css_parts[] = '@media (max-width:1024px){.' . $class_name . '{' . $decl . '}}';
 	}
 
 	if ( ! empty( $mobile_declarations ) ) {
@@ -180,7 +226,7 @@ function ro_render_responsive_group_spacing( $block_content, $block ) {
 		return $updated_content;
 	}
 
-	return $updated_content . '<style>' . esc_html( implode( '', $css_parts ) ) . '</style>';
+	return $updated_content . '<style>' . implode( '', $css_parts ) . '</style>';
 }
 add_filter( 'render_block', 'ro_render_responsive_group_spacing', 10, 2 );
 
