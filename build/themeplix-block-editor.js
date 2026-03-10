@@ -149,50 +149,52 @@ __webpack_require__.r(__webpack_exports__);
 
 
 const TARGET_BLOCK = 'core/group';
-const isObject = v => v && typeof v === 'object' && !Array.isArray(v);
-const clone = v => isObject(v) ? JSON.parse(JSON.stringify(v)) : v;
+const isObject = value => value && typeof value === 'object' && !Array.isArray(value);
+
+// Deep clone for objects.
+const clone = value => isObject(value) ? JSON.parse(JSON.stringify(value)) : value;
 
 /**
  * Get the padding object from attributes (e.g. { top: "20px", left: "10px" }).
  */
 const getPadding = attributes => {
-  const p = attributes?.style?.spacing?.padding;
-  return isObject(p) ? p : {};
+  const padding = attributes?.style?.spacing?.padding;
+  return isObject(padding) ? padding : {};
 };
 
 /**
  * Get stored responsive padding for a device from responsiveStyles.
  */
 const getDevicePadding = (attributes, device) => {
-  const p = attributes?.responsiveStyles?.[device]?.padding;
-  return isObject(p) ? p : {};
+  const devicePadding = attributes?.responsiveStyles?.[device]?.padding;
+  return isObject(devicePadding) ? devicePadding : {};
 };
 
 /**
  * Build an updated responsiveStyles object with new padding for a device.
  */
 const setDevicePadding = (attributes, device, padding) => {
-  const rs = clone(attributes?.responsiveStyles || {});
-  if (!isObject(rs[device])) {
-    rs[device] = {};
+  const responsiveStyles = clone(attributes?.responsiveStyles || {});
+  if (!isObject(responsiveStyles[device])) {
+    responsiveStyles[device] = {};
   }
-  rs[device].padding = {
-    ...(rs[device].padding || {}),
+  responsiveStyles[device].padding = {
+    ...(responsiveStyles[device].padding || {}),
     ...padding
   };
-  return rs;
+  return responsiveStyles;
 };
 
 /**
  * Build a style object with replaced padding.
  */
 const buildStyleWithPadding = (attributes, padding) => {
-  const s = clone(attributes?.style || {});
-  if (!isObject(s.spacing)) {
-    s.spacing = {};
+  const styleObject = clone(attributes?.style || {});
+  if (!isObject(styleObject.spacing)) {
+    styleObject.spacing = {};
   }
-  s.spacing.padding = padding;
-  return s;
+  styleObject.spacing.padding = padding;
+  return styleObject;
 };
 
 // ── editor.BlockEdit: intercept setAttributes + swap on device switch ──
@@ -210,7 +212,6 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
     } = props;
     const deviceType = (0,_wordpress_data__WEBPACK_IMPORTED_MODULE_2__.useSelect)(select => select('core/editor').getDeviceType(), []);
     const device = (deviceType || 'Desktop').toLowerCase();
-
     // Refs to track previous device and prevent infinite loops.
     const prevDeviceRef = (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_3__.useRef)(device);
     const isSyncing = (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_3__.useRef)(false);
@@ -225,44 +226,44 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
         return;
       }
       didMount.current = true;
-      const a = attrsRef.current;
-      const desktopPadding = a?.responsiveStyles?.desktop?.padding;
+      const currentAttributes = attrsRef.current;
+      const desktopPadding = currentAttributes?.responsiveStyles?.desktop?.padding;
       if (!isObject(desktopPadding) || !Object.keys(desktopPadding).length) {
         return;
       }
-      const livePadding = getPadding(a);
+      const livePadding = getPadding(currentAttributes);
       if (JSON.stringify(livePadding) === JSON.stringify(desktopPadding)) {
         return;
       }
       isSyncing.current = true;
       setAttributes({
-        style: buildStyleWithPadding(a, clone(desktopPadding))
+        style: buildStyleWithPadding(currentAttributes, clone(desktopPadding))
       });
       requestAnimationFrame(() => {
         isSyncing.current = false;
       });
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    }, []);
 
     // When the device changes, swap padding in the store.
     (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_3__.useEffect)(() => {
       if (prevDeviceRef.current === device) {
         return;
       }
-      const prev = prevDeviceRef.current;
+      const previousDevice = prevDeviceRef.current;
       prevDeviceRef.current = device;
       isSyncing.current = true;
       const currentAttrs = attrsRef.current;
 
       // 1. Save current live padding into responsiveStyles for the *previous* device.
       const livePadding = getPadding(currentAttrs);
-      let nextRS = setDevicePadding(currentAttrs, prev, livePadding);
+      let nextResponsiveStyles = setDevicePadding(currentAttrs, previousDevice, livePadding);
 
       // 2. Also persist the nextRS update for the previous device.
       // 3. Load the new device's stored padding into style.spacing.padding.
-      const newPadding = nextRS[device]?.padding;
+      const newPadding = nextResponsiveStyles[device]?.padding;
       const nextStyle = buildStyleWithPadding(currentAttrs, isObject(newPadding) && Object.keys(newPadding).length ? clone(newPadding) : clone(livePadding));
       setAttributes({
-        responsiveStyles: nextRS,
+        responsiveStyles: nextResponsiveStyles,
         style: nextStyle
       });
 
@@ -272,7 +273,12 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
       });
     }, [device]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Intercept setAttributes: on tablet/mobile, also mirror padding into responsiveStyles.
+    /**
+           * This act as middleware to keep responsiveStyles in sync when users edit padding on non-desktop devices.
+           * Intercept setAttributes: on tablet/mobile, also mirror padding into responsiveStyles.
+           *          
+           */
+
     const interceptedSetAttributes = newAttrs => {
       // During our own sync, pass through untouched.
       if (isSyncing.current) {
