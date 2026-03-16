@@ -19,10 +19,13 @@
 		"@wordpress/blocks": "latest",
 		"@wordpress/compose": "^7.41.0",
 		"@wordpress/data": "^10.41.0",
+		"@wordpress/edit-post": "^8.41.0",
 		"@wordpress/hooks": "^4.41.0",
 		"@wordpress/i18n": "latest"
 	},
 	"devDependencies": {
+		"@types/wordpress__edit-post": "^8.4.2",
+		"@wordpress/plugins": "^7.41.0",
 		"@wordpress/scripts": "^31.6.0"
 	}
 }

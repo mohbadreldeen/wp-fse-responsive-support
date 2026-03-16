@@ -6,7 +6,7 @@ module.exports = {
 	mode: "development",
 	entry: {
 		...defaults.entry(),
-		"themeplix-block-editor": path.resolve(process.cwd(), "src/block-editor", "index.js"),
+		"themeplix-block-editor": path.resolve(process.cwd(), "src/block-editor", "index.ts"),
 	},
 	module: {
 		...defaults.module,
