@@ -4,7 +4,7 @@ import { useEffect, useRef } from "@wordpress/element";
 import { useSelect } from "@wordpress/data";
 import { clone, isObject, getValueAtPath } from "../utils";
 import { useActiveTargets } from "./targets-store";
-import { ResponsiveTarget } from "./types";
+
 import {
 	getResponsiveValue,
 	removeResponsiveValue,
@@ -85,6 +85,9 @@ export const withResponsiveLogic = createHigherOrderComponent(
 			const didMountRef = useRef(false);
 			attrsRef.current = attributes;
 
+			/**
+			 * Run only once onMount
+			 */
 			useEffect(() => {
 				if (didMountRef.current) {
 					return;
@@ -132,7 +135,9 @@ export const withResponsiveLogic = createHigherOrderComponent(
 					});
 				}
 			}, []);
-
+			/**
+			 * Run after every device preview change
+			 */
 			useEffect(() => {
 				if (prevDeviceRef.current === device) {
 					return;
@@ -193,7 +198,12 @@ export const withResponsiveLogic = createHigherOrderComponent(
 				});
 			}, [device]); // eslint-disable-line react-hooks/exhaustive-deps
 
+			/**
+			 * Run Everytime an attribute changes.
+			 */
+
 			const interceptedSetAttributes = (newAttrs: Record<string, any>) => {
+				console.log("interceptedSetAttributes 1");
 				if (isSyncingRef.current) {
 					setAttributes(newAttrs);
 					return;
@@ -205,6 +215,8 @@ export const withResponsiveLogic = createHigherOrderComponent(
 				let hasResponsiveChange = false;
 
 				targets.forEach((target) => {
+					console.log("interceptedSetAttributes 2", target);
+
 					if (!hasPathInObject(newAttrs, target.path)) {
 						return;
 					}

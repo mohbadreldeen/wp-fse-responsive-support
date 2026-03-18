@@ -16,8 +16,10 @@ previewAdapterRegistry.register(
 	"style.color.background",
 	colorStyleValueAdapter,
 );
+previewAdapterRegistry.register("style.border.color", colorStyleValueAdapter);
 previewAdapterRegistry.register("textColor", colorPresetSlugAdapter);
 previewAdapterRegistry.register("backgroundColor", colorPresetSlugAdapter);
+previewAdapterRegistry.register("borderColor", colorPresetSlugAdapter);
 previewAdapterRegistry.register("style.spacing.padding", spacingObjectAdapter);
 previewAdapterRegistry.register("style.spacing.margin", spacingObjectAdapter);
 previewAdapterRegistry.register("style.border.radius", borderGeometryAdapter);

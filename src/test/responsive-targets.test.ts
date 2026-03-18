@@ -11,6 +11,16 @@ describe("listAttributeCandidates", () => {
 		expect(paths).toContain("style.border.color");
 	});
 
+	it("marks default style.border.color as style-value border channel", () => {
+		const candidates = listAttributeCandidates({});
+		const borderColor = candidates.find(
+			(candidate) => candidate.path === "style.border.color",
+		);
+
+		expect(borderColor?.sourceKind).toBe("style-value");
+		expect(borderColor?.channel).toBe("border");
+	});
+
 	it("skips non-actionable object container paths", () => {
 		const attributes = {
 			style: {

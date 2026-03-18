@@ -1,7 +1,7 @@
 export type ValueKind = "scalar" | "object";
 
 export type ResponsiveSourceKind = "style-value" | "preset-slug" | "generic";
-export type ResponsiveColorChannel = "text" | "background";
+export type ResponsiveColorChannel = "text" | "background" | "border";
 
 export type ResponsiveTarget = {
 	block: string;

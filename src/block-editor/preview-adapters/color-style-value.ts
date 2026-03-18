@@ -8,6 +8,7 @@ import type {
 /**
  * Handles style.color.text → CSS `color`
  *         style.color.background → CSS `background-color`
+ *         style.border.color → CSS `border-color`
  *
  * These carry literal color values entered by the user (e.g. #ff0000).
  * Priority 100 — always wins over preset-slug adapters.
@@ -19,7 +20,8 @@ export const colorStyleValueAdapter: PreviewAdapter = {
 	canHandle(target: ResponsiveTarget): boolean {
 		return (
 			target.path === "style.color.text" ||
-			target.path === "style.color.background"
+			target.path === "style.color.background" ||
+			target.path === "style.border.color"
 		);
 	},
 
@@ -29,7 +31,11 @@ export const colorStyleValueAdapter: PreviewAdapter = {
 		}
 
 		const cssProperty =
-			target.path === "style.color.text" ? "color" : "background-color";
+			target.path === "style.color.text"
+				? "color"
+				: target.path === "style.border.color"
+				? "border-color"
+				: "background-color";
 
 		return { cssProperty, cssValue: value };
 	},

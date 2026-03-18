@@ -58,8 +58,8 @@ const DEFAULT_STYLE_TARGETS = [
 		valueKind: "scalar",
 		leafKeys: [],
 		mapper: "borderColor",
-		sourceKind: "generic",
-		channel: undefined,
+		sourceKind: "style-value",
+		channel: "border",
 	},
 ];
 

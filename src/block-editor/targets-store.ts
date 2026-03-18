@@ -12,7 +12,7 @@ import { normalizeTargets } from "./target-discovery";
 const runtimeSettings =
 	(window as ExtendedWindow)?.responsiveOverridesSettings || {};
 
-export const ACTIVE_TARGETS_STORE_NAME = "responsive-overrides/active-targets";
+const ACTIVE_TARGETS_STORE_NAME = "responsive-overrides/active-targets";
 
 type ActiveTargetsState = {
 	targets: ResponsiveTarget[];

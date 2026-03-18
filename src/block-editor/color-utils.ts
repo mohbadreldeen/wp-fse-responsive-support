@@ -12,8 +12,10 @@ const COLOR_META_MAP: Record<string, ColorTargetMeta> = {
 		sourceKind: "style-value",
 		channel: "background",
 	},
+	"style.border.color": { sourceKind: "style-value", channel: "border" },
 	textColor: { sourceKind: "preset-slug", channel: "text" },
 	backgroundColor: { sourceKind: "preset-slug", channel: "background" },
+	borderColor: { sourceKind: "preset-slug", channel: "border" },
 };
 
 const GENERIC_META: ColorTargetMeta = {

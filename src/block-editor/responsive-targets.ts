@@ -118,10 +118,6 @@ export const removeResponsiveValue = (
 		delete nextResponsiveStyles[device][pathKey];
 	}
 
-	// Important: clearing one path must not implicitly clear its alias.
-	// Example: removing style.color.background during a device switch should not
-	// remove a valid backgroundColor preset stored for that device.
-
 	return nextResponsiveStyles;
 };
 

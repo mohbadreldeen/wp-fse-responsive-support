@@ -24,6 +24,10 @@ const COLOR_META_MAP = {
     sourceKind: "style-value",
     channel: "background"
   },
+  "style.border.color": {
+    sourceKind: "style-value",
+    channel: "border"
+  },
   textColor: {
     sourceKind: "preset-slug",
     channel: "text"
@@ -31,6 +35,10 @@ const COLOR_META_MAP = {
   backgroundColor: {
     sourceKind: "preset-slug",
     channel: "background"
+  },
+  borderColor: {
+    sourceKind: "preset-slug",
+    channel: "border"
   }
 };
 const GENERIC_META = {
@@ -203,6 +211,7 @@ __webpack_require__.r(__webpack_exports__);
 /**
  * Handles textColor → CSS `color` (via preset slug)
  *         backgroundColor → CSS `background-color` (via preset slug)
+ *         borderColor → CSS `border-color` (via preset slug)
  *
  * Preset slugs are resolved to var(--wp--preset--color--<slug>).
  * Priority 50 — defers to style-value adapters (priority 100) for the same channel.
@@ -211,7 +220,7 @@ const colorPresetSlugAdapter = {
   id: "color-preset-slug",
   priority: 50,
   canHandle(target) {
-    return target.path === "textColor" || target.path === "backgroundColor";
+    return target.path === "textColor" || target.path === "backgroundColor" || target.path === "borderColor";
   },
   resolve(target, value, resolvedChannels) {
     if (typeof value !== "string" || !value) {
@@ -219,7 +228,7 @@ const colorPresetSlugAdapter = {
         skip: true
       };
     }
-    const channel = target.path === "textColor" ? "text" : "background";
+    const channel = target.path === "textColor" ? "text" : target.path === "borderColor" ? "border" : "background";
 
     // Yield to a style-value that was already applied for this channel.
     if (resolvedChannels[channel] === "style-value") {
@@ -227,7 +236,7 @@ const colorPresetSlugAdapter = {
         skip: true
       };
     }
-    const cssProperty = channel === "text" ? "color" : "background-color";
+    const cssProperty = channel === "text" ? "color" : channel === "border" ? "border-color" : "background-color";
     const cssValue = (0,_color_utils__WEBPACK_IMPORTED_MODULE_0__.resolvePresetColorValue)(value);
     if (!cssValue) {
       return {
@@ -256,6 +265,7 @@ __webpack_require__.r(__webpack_exports__);
 /**
  * Handles style.color.text → CSS `color`
  *         style.color.background → CSS `background-color`
+ *         style.border.color → CSS `border-color`
  *
  * These carry literal color values entered by the user (e.g. #ff0000).
  * Priority 100 — always wins over preset-slug adapters.
@@ -264,7 +274,7 @@ const colorStyleValueAdapter = {
   id: "color-style-value",
   priority: 100,
   canHandle(target) {
-    return target.path === "style.color.text" || target.path === "style.color.background";
+    return target.path === "style.color.text" || target.path === "style.color.background" || target.path === "style.border.color";
   },
   resolve(target, value) {
     if (typeof value !== "string" || !value) {
@@ -272,7 +282,7 @@ const colorStyleValueAdapter = {
         skip: true
       };
     }
-    const cssProperty = target.path === "style.color.text" ? "color" : "background-color";
+    const cssProperty = target.path === "style.color.text" ? "color" : target.path === "style.border.color" ? "border-color" : "background-color";
     return {
       cssProperty,
       cssValue: value
@@ -416,8 +426,10 @@ __webpack_require__.r(__webpack_exports__);
 // --- Exact-path registrations ---
 _preview_adapter_registry__WEBPACK_IMPORTED_MODULE_0__.previewAdapterRegistry.register("style.color.text", _color_style_value__WEBPACK_IMPORTED_MODULE_1__.colorStyleValueAdapter);
 _preview_adapter_registry__WEBPACK_IMPORTED_MODULE_0__.previewAdapterRegistry.register("style.color.background", _color_style_value__WEBPACK_IMPORTED_MODULE_1__.colorStyleValueAdapter);
+_preview_adapter_registry__WEBPACK_IMPORTED_MODULE_0__.previewAdapterRegistry.register("style.border.color", _color_style_value__WEBPACK_IMPORTED_MODULE_1__.colorStyleValueAdapter);
 _preview_adapter_registry__WEBPACK_IMPORTED_MODULE_0__.previewAdapterRegistry.register("textColor", _color_preset_slug__WEBPACK_IMPORTED_MODULE_2__.colorPresetSlugAdapter);
 _preview_adapter_registry__WEBPACK_IMPORTED_MODULE_0__.previewAdapterRegistry.register("backgroundColor", _color_preset_slug__WEBPACK_IMPORTED_MODULE_2__.colorPresetSlugAdapter);
+_preview_adapter_registry__WEBPACK_IMPORTED_MODULE_0__.previewAdapterRegistry.register("borderColor", _color_preset_slug__WEBPACK_IMPORTED_MODULE_2__.colorPresetSlugAdapter);
 _preview_adapter_registry__WEBPACK_IMPORTED_MODULE_0__.previewAdapterRegistry.register("style.spacing.padding", _spacing_object__WEBPACK_IMPORTED_MODULE_3__.spacingObjectAdapter);
 _preview_adapter_registry__WEBPACK_IMPORTED_MODULE_0__.previewAdapterRegistry.register("style.spacing.margin", _spacing_object__WEBPACK_IMPORTED_MODULE_3__.spacingObjectAdapter);
 _preview_adapter_registry__WEBPACK_IMPORTED_MODULE_0__.previewAdapterRegistry.register("style.border.radius", _border_geometry__WEBPACK_IMPORTED_MODULE_4__.borderGeometryAdapter);
@@ -846,11 +858,6 @@ const removeResponsiveValue = (attributes, device, target) => {
   if (nextResponsiveStyles[device][pathKey] !== undefined) {
     delete nextResponsiveStyles[device][pathKey];
   }
-
-  // Important: clearing one path must not implicitly clear its alias.
-  // Example: removing style.color.background during a device switch should not
-  // remove a valid backgroundColor preset stored for that device.
-
   return nextResponsiveStyles;
 };
 const getResponsiveValue = (attributes, device, target) => {
@@ -931,8 +938,8 @@ const DEFAULT_STYLE_TARGETS = [{
   valueKind: "scalar",
   leafKeys: [],
   mapper: "borderColor",
-  sourceKind: "generic",
-  channel: undefined
+  sourceKind: "style-value",
+  channel: "border"
 }];
 const normalizeTargets = rawTargets => {
   if (!Array.isArray(rawTargets) || !rawTargets.length) {
@@ -1071,7 +1078,6 @@ const listAttributeCandidates = (attributes, pathPrefix = "", depth = 0) => {
 
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   ACTIVE_TARGETS_STORE_NAME: () => (/* binding */ ACTIVE_TARGETS_STORE_NAME),
 /* harmony export */   getActiveTargets: () => (/* binding */ getActiveTargets),
 /* harmony export */   setActiveTargets: () => (/* binding */ setActiveTargets),
 /* harmony export */   useActiveTargets: () => (/* binding */ useActiveTargets)
@@ -1225,6 +1231,10 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
     const attrsRef = (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_2__.useRef)(attributes);
     const didMountRef = (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_2__.useRef)(false);
     attrsRef.current = attributes;
+
+    /**
+     * Run only once onMount
+     */
     (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_2__.useEffect)(() => {
       if (didMountRef.current) {
         return;
@@ -1259,6 +1269,9 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
         });
       }
     }, []);
+    /**
+     * Run after every device preview change
+     */
     (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_2__.useEffect)(() => {
       if (prevDeviceRef.current === device) {
         return;
@@ -1294,7 +1307,12 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
       });
     }, [device]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    /**
+     * Run Everytime an attribute changes.
+     */
+
     const interceptedSetAttributes = newAttrs => {
+      console.log("interceptedSetAttributes 1");
       if (isSyncingRef.current) {
         setAttributes(newAttrs);
         return;
@@ -1302,6 +1320,7 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
       let nextResponsiveStyles = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(attrsRef.current?.responsiveStyles || {});
       let hasResponsiveChange = false;
       targets.forEach(target => {
+        console.log("interceptedSetAttributes 2", target);
         if (!hasPathInObject(newAttrs, target.path)) {
           return;
         }
