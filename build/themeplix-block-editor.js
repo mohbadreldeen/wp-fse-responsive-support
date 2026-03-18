@@ -484,6 +484,124 @@ const spacingObjectAdapter = {
 
 /***/ },
 
+/***/ "./src/block-editor/responsive-state-helpers.ts"
+/*!******************************************************!*\
+  !*** ./src/block-editor/responsive-state-helpers.ts ***!
+  \******************************************************/
+(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
+
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   getResponsiveValue: () => (/* binding */ getResponsiveValue),
+/* harmony export */   removeResponsiveValue: () => (/* binding */ removeResponsiveValue),
+/* harmony export */   setResponsiveValue: () => (/* binding */ setResponsiveValue)
+/* harmony export */ });
+/* harmony import */ var _utils__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../utils */ "./src/utils/index.ts");
+
+class ResponsiveWriteAdapterRegistry {
+  adapters = [];
+  register(adapter) {
+    this.adapters.push(adapter);
+    this.adapters.sort((a, b) => b.priority - a.priority);
+  }
+  resolve(target) {
+    return this.adapters.find(adapter => adapter.canHandle(target));
+  }
+}
+const COLOR_ALIAS_CONFLICTS = {
+  "style.color.background": ["backgroundColor"],
+  backgroundColor: ["style.color.background"],
+  "style.color.text": ["textColor"],
+  textColor: ["style.color.text"]
+};
+const colorAliasWriteAdapter = {
+  id: "color-alias-write-adapter",
+  priority: 100,
+  canHandle(target) {
+    return Object.prototype.hasOwnProperty.call(COLOR_ALIAS_CONFLICTS, target.path);
+  },
+  normalize({
+    devicePayload,
+    target
+  }) {
+    const conflictingPaths = COLOR_ALIAS_CONFLICTS[target.path] || [];
+    conflictingPaths.forEach(path => {
+      const key = (0,_utils__WEBPACK_IMPORTED_MODULE_0__.encodePathKey)(path);
+      if (devicePayload[key] !== undefined) {
+        delete devicePayload[key];
+      }
+    });
+  }
+};
+const responsiveWriteAdapterRegistry = new ResponsiveWriteAdapterRegistry();
+responsiveWriteAdapterRegistry.register(colorAliasWriteAdapter);
+const setResponsiveValue = (attributes, device, target, value) => {
+  const nextResponsiveStyles = (0,_utils__WEBPACK_IMPORTED_MODULE_0__.clone)(attributes?.responsiveStyles || {});
+  if (!(0,_utils__WEBPACK_IMPORTED_MODULE_0__.isObject)(nextResponsiveStyles[device])) {
+    nextResponsiveStyles[device] = {};
+  }
+  const pathKey = (0,_utils__WEBPACK_IMPORTED_MODULE_0__.encodePathKey)(target.path);
+  if (target.valueKind === "object" && (0,_utils__WEBPACK_IMPORTED_MODULE_0__.isObject)(value)) {
+    const existingValue = (0,_utils__WEBPACK_IMPORTED_MODULE_0__.isObject)(nextResponsiveStyles[device][pathKey]) ? nextResponsiveStyles[device][pathKey] : {};
+    const nextValue = {
+      ...existingValue
+    };
+    if (Array.isArray(target.leafKeys) && target.leafKeys.length) {
+      target.leafKeys.forEach(key => {
+        if (Object.prototype.hasOwnProperty.call(value, key)) {
+          nextValue[key] = (0,_utils__WEBPACK_IMPORTED_MODULE_0__.clone)(value[key]);
+        }
+      });
+    } else {
+      Object.assign(nextValue, (0,_utils__WEBPACK_IMPORTED_MODULE_0__.clone)(value));
+    }
+    nextResponsiveStyles[device][pathKey] = nextValue;
+  } else {
+    nextResponsiveStyles[device][pathKey] = (0,_utils__WEBPACK_IMPORTED_MODULE_0__.clone)(value);
+  }
+  try {
+    const adapter = responsiveWriteAdapterRegistry.resolve(target);
+    if (adapter && (0,_utils__WEBPACK_IMPORTED_MODULE_0__.isObject)(nextResponsiveStyles[device])) {
+      adapter.normalize({
+        devicePayload: nextResponsiveStyles[device],
+        target
+      });
+    }
+  } catch (e) {
+    // Defensive: don't let this helper throw in edge cases.
+  }
+  return nextResponsiveStyles;
+};
+const removeResponsiveValue = (attributes, device, target) => {
+  const nextResponsiveStyles = (0,_utils__WEBPACK_IMPORTED_MODULE_0__.clone)(attributes?.responsiveStyles || {});
+  if (!(0,_utils__WEBPACK_IMPORTED_MODULE_0__.isObject)(nextResponsiveStyles[device])) {
+    nextResponsiveStyles[device] = {};
+  }
+  const pathKey = (0,_utils__WEBPACK_IMPORTED_MODULE_0__.encodePathKey)(target.path);
+  if (nextResponsiveStyles[device][pathKey] !== undefined) {
+    delete nextResponsiveStyles[device][pathKey];
+  }
+
+  // Important: clearing one path must not implicitly clear its alias.
+  // Example: removing style.color.background during a device switch should not
+  // remove a valid backgroundColor preset stored for that device.
+
+  return nextResponsiveStyles;
+};
+const getResponsiveValue = (attributes, device, target) => {
+  const payload = attributes?.responsiveStyles?.[device];
+  if (!(0,_utils__WEBPACK_IMPORTED_MODULE_0__.isObject)(payload)) {
+    return undefined;
+  }
+  const pathKey = (0,_utils__WEBPACK_IMPORTED_MODULE_0__.encodePathKey)(target.path);
+  if (payload[pathKey] !== undefined) {
+    return payload[pathKey];
+  }
+  return undefined;
+};
+
+/***/ },
+
 /***/ "./src/block-editor/responsive-targets-modal.tsx"
 /*!*******************************************************!*\
   !*** ./src/block-editor/responsive-targets-modal.tsx ***!
@@ -934,8 +1052,10 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _wordpress_data__WEBPACK_IMPORTED_MODULE_3___default = /*#__PURE__*/__webpack_require__.n(_wordpress_data__WEBPACK_IMPORTED_MODULE_3__);
 /* harmony import */ var _utils__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ../utils */ "./src/utils/index.ts");
 /* harmony import */ var _target_discovery__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./target-discovery */ "./src/block-editor/target-discovery.ts");
-/* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! react/jsx-runtime */ "react/jsx-runtime");
-/* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6___default = /*#__PURE__*/__webpack_require__.n(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__);
+/* harmony import */ var _responsive_state_helpers__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ./responsive-state-helpers */ "./src/block-editor/responsive-state-helpers.ts");
+/* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! react/jsx-runtime */ "react/jsx-runtime");
+/* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7___default = /*#__PURE__*/__webpack_require__.n(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__);
+
 
 
 
@@ -944,43 +1064,6 @@ __webpack_require__.r(__webpack_exports__);
 
 
 const getTargetsForBlock = blockName => (0,_target_discovery__WEBPACK_IMPORTED_MODULE_5__.getActiveTargets)().filter(target => target.block === blockName);
-class ResponsiveWriteAdapterRegistry {
-  adapters = [];
-  register(adapter) {
-    this.adapters.push(adapter);
-    this.adapters.sort((a, b) => b.priority - a.priority);
-  }
-  resolve(target) {
-    return this.adapters.find(adapter => adapter.canHandle(target));
-  }
-}
-const COLOR_ALIAS_CONFLICTS = {
-  "style.color.background": ["backgroundColor"],
-  backgroundColor: ["style.color.background"],
-  "style.color.text": ["textColor"],
-  textColor: ["style.color.text"]
-};
-const colorAliasWriteAdapter = {
-  id: "color-alias-write-adapter",
-  priority: 100,
-  canHandle(target) {
-    return Object.prototype.hasOwnProperty.call(COLOR_ALIAS_CONFLICTS, target.path);
-  },
-  normalize({
-    devicePayload,
-    target
-  }) {
-    const conflictingPaths = COLOR_ALIAS_CONFLICTS[target.path] || [];
-    conflictingPaths.forEach(path => {
-      const key = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.encodePathKey)(path);
-      if (devicePayload[key] !== undefined) {
-        delete devicePayload[key];
-      }
-    });
-  }
-};
-const responsiveWriteAdapterRegistry = new ResponsiveWriteAdapterRegistry();
-responsiveWriteAdapterRegistry.register(colorAliasWriteAdapter);
 const setValueAtPath = (object, path, value) => {
   if (!path) {
     return object;
@@ -1021,85 +1104,11 @@ const hasPathInObject = (object, path) => {
   }
   return true;
 };
-const setResponsiveValue = (attributes, device, target, value) => {
-  const nextResponsiveStyles = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(attributes?.responsiveStyles || {});
-  if (!(0,_utils__WEBPACK_IMPORTED_MODULE_4__.isObject)(nextResponsiveStyles[device])) {
-    nextResponsiveStyles[device] = {};
-  }
-  const pathKey = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.encodePathKey)(target.path);
-  if (target.valueKind === "object" && (0,_utils__WEBPACK_IMPORTED_MODULE_4__.isObject)(value)) {
-    const existingValue = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.isObject)(nextResponsiveStyles[device][pathKey]) ? nextResponsiveStyles[device][pathKey] : {};
-    const nextValue = {
-      ...existingValue
-    };
-    if (Array.isArray(target.leafKeys) && target.leafKeys.length) {
-      target.leafKeys.forEach(key => {
-        if (Object.prototype.hasOwnProperty.call(value, key)) {
-          nextValue[key] = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(value[key]);
-        }
-      });
-    } else {
-      Object.assign(nextValue, (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(value));
-    }
-    nextResponsiveStyles[device][pathKey] = nextValue;
-  } else {
-    nextResponsiveStyles[device][pathKey] = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(value);
-  }
-
-  // Delegate post-write normalization to adapters for easier extensibility.
-  try {
-    const adapter = responsiveWriteAdapterRegistry.resolve(target);
-    if (adapter && (0,_utils__WEBPACK_IMPORTED_MODULE_4__.isObject)(nextResponsiveStyles[device])) {
-      adapter.normalize({
-        devicePayload: nextResponsiveStyles[device],
-        target
-      });
-    }
-  } catch (e) {
-    // Defensive: don't let this helper throw in edge cases.
-  }
-  return nextResponsiveStyles;
-};
-const removeResponsiveValue = (attributes, device, target) => {
-  const nextResponsiveStyles = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(attributes?.responsiveStyles || {});
-  if (!(0,_utils__WEBPACK_IMPORTED_MODULE_4__.isObject)(nextResponsiveStyles[device])) {
-    nextResponsiveStyles[device] = {};
-  }
-  const pathKey = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.encodePathKey)(target.path);
-  if (nextResponsiveStyles[device][pathKey] !== undefined) {
-    delete nextResponsiveStyles[device][pathKey];
-  }
-
-  // Keep alias targets mutually exclusive even when one side is removed.
-  try {
-    const adapter = responsiveWriteAdapterRegistry.resolve(target);
-    if (adapter && (0,_utils__WEBPACK_IMPORTED_MODULE_4__.isObject)(nextResponsiveStyles[device])) {
-      adapter.normalize({
-        devicePayload: nextResponsiveStyles[device],
-        target
-      });
-    }
-  } catch (e) {
-    // Defensive: don't let this helper throw in edge cases.
-  }
-  return nextResponsiveStyles;
-};
-const getResponsiveValue = (attributes, device, target) => {
-  const payload = attributes?.responsiveStyles?.[device];
-  if (!(0,_utils__WEBPACK_IMPORTED_MODULE_4__.isObject)(payload)) {
-    return undefined;
-  }
-  const pathKey = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.encodePathKey)(target.path);
-  if (payload[pathKey] !== undefined) {
-    return payload[pathKey];
-  }
-  return undefined;
-};
 const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.createHigherOrderComponent)(BlockEdit => {
   return props => {
     const targets = getTargetsForBlock(props.name);
     if (!targets.length) {
-      return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)(BlockEdit, {
+      return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)(BlockEdit, {
         ...props
       });
     }
@@ -1115,23 +1124,21 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
     const didMountRef = (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_2__.useRef)(false);
     attrsRef.current = attributes;
     (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_2__.useEffect)(() => {
-      console.log("first");
       if (didMountRef.current) {
         return;
       }
       didMountRef.current = true;
-      console.log("continue");
       const nextAttributes = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(attrsRef.current);
       let nextResponsiveStyles = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(attrsRef.current?.responsiveStyles || {});
       let needsUpdate = false;
       targets.forEach(target => {
-        const desktopValue = getResponsiveValue({
+        const desktopValue = (0,_responsive_state_helpers__WEBPACK_IMPORTED_MODULE_6__.getResponsiveValue)({
           responsiveStyles: nextResponsiveStyles
         }, "desktop", target);
         if (desktopValue === undefined) {
           const liveValue = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.getValueAtPath)(attrsRef.current, target.path);
           if (liveValue !== undefined) {
-            nextResponsiveStyles = setResponsiveValue({
+            nextResponsiveStyles = (0,_responsive_state_helpers__WEBPACK_IMPORTED_MODULE_6__.setResponsiveValue)({
               responsiveStyles: nextResponsiveStyles
             }, "desktop", target, liveValue);
             needsUpdate = true;
@@ -1145,7 +1152,6 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
         nextAttributes.responsiveStyles = nextResponsiveStyles;
         isSyncingRef.current = true;
         setAttributes(nextAttributes);
-        console.log("nextAttributes", nextAttributes);
         requestAnimationFrame(() => {
           isSyncingRef.current = false;
         });
@@ -1160,27 +1166,25 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
       let nextResponsiveStyles = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(attrsRef.current?.responsiveStyles || {});
       targets.forEach(target => {
         const liveValue = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.getValueAtPath)(attrsRef.current, target.path);
-        console.log("liveValue", liveValue);
         if (liveValue === undefined) {
-          nextResponsiveStyles = removeResponsiveValue({
+          nextResponsiveStyles = (0,_responsive_state_helpers__WEBPACK_IMPORTED_MODULE_6__.removeResponsiveValue)({
             responsiveStyles: nextResponsiveStyles
           }, previousDevice, target);
           return;
         }
-        nextResponsiveStyles = setResponsiveValue({
+        nextResponsiveStyles = (0,_responsive_state_helpers__WEBPACK_IMPORTED_MODULE_6__.setResponsiveValue)({
           responsiveStyles: nextResponsiveStyles
         }, previousDevice, target, liveValue);
       });
       const nextAttributes = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(attrsRef.current);
       targets.forEach(target => {
-        const currentDeviceValue = getResponsiveValue({
+        const currentDeviceValue = (0,_responsive_state_helpers__WEBPACK_IMPORTED_MODULE_6__.getResponsiveValue)({
           responsiveStyles: nextResponsiveStyles
         }, device, target);
         setValueAtPath(nextAttributes, target.path, currentDeviceValue === undefined ? undefined : (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(currentDeviceValue));
       });
       nextAttributes.responsiveStyles = nextResponsiveStyles;
       isSyncingRef.current = true;
-      console.log("divce changes nextAttributes", nextAttributes);
       setAttributes(nextAttributes);
       requestAnimationFrame(() => {
         isSyncingRef.current = false;
@@ -1205,7 +1209,7 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
         }
         if (incomingValue === undefined) {
           hasResponsiveChange = true;
-          nextResponsiveStyles = removeResponsiveValue({
+          nextResponsiveStyles = (0,_responsive_state_helpers__WEBPACK_IMPORTED_MODULE_6__.removeResponsiveValue)({
             responsiveStyles: nextResponsiveStyles
           }, device, target);
           return;
@@ -1214,7 +1218,7 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
           return;
         }
         hasResponsiveChange = true;
-        nextResponsiveStyles = setResponsiveValue({
+        nextResponsiveStyles = (0,_responsive_state_helpers__WEBPACK_IMPORTED_MODULE_6__.setResponsiveValue)({
           responsiveStyles: nextResponsiveStyles
         }, device, target, incomingValue);
       });
@@ -1222,16 +1226,12 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
         setAttributes(newAttrs);
         return;
       }
-      console.log("attribute changes nextResponsiveStyles", {
-        ...newAttrs,
-        responsiveStyles: nextResponsiveStyles
-      });
       setAttributes({
         ...newAttrs,
         responsiveStyles: nextResponsiveStyles
       });
     };
-    return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)(BlockEdit, {
+    return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)(BlockEdit, {
       ...props,
       setAttributes: interceptedSetAttributes
     });
