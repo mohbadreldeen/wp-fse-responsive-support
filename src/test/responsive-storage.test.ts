@@ -3,7 +3,7 @@ import { encodePathKey } from "../utils";
 import {
 	removeResponsiveValue,
 	setResponsiveValue,
-} from "../block-editor/responsive-state-helpers";
+} from "../block-editor/responsive-targets";
 import type { ResponsiveTarget } from "../block-editor/types";
 
 const makeTarget = (
@@ -118,6 +118,44 @@ describe("setResponsiveValue", () => {
 
 		expect(next.tablet[encodePathKey("style.color.text")]).toBe("#333333");
 		expect(next.tablet[encodePathKey("textColor")]).toBeUndefined();
+	});
+
+	it("removes borderColor when style.border.color is set", () => {
+		const target = makeTarget({
+			path: "style.border.color",
+			mapper: "borderColor",
+		});
+		const existing = {
+			responsiveStyles: {
+				tablet: {
+					[encodePathKey("borderColor")]: "brand",
+				},
+			},
+		};
+
+		const next = setResponsiveValue(existing, "tablet", target, "#0053b8");
+
+		expect(next.tablet[encodePathKey("style.border.color")]).toBe("#0053b8");
+		expect(next.tablet[encodePathKey("borderColor")]).toBeUndefined();
+	});
+
+	it("removes style.border.color when borderColor is set", () => {
+		const target = makeTarget({
+			path: "borderColor",
+			mapper: "borderColor",
+		});
+		const existing = {
+			responsiveStyles: {
+				mobile: {
+					[encodePathKey("style.border.color")]: "#0053b8",
+				},
+			},
+		};
+
+		const next = setResponsiveValue(existing, "mobile", target, "contrast");
+
+		expect(next.mobile[encodePathKey("borderColor")]).toBe("contrast");
+		expect(next.mobile[encodePathKey("style.border.color")]).toBeUndefined();
 	});
 });
 

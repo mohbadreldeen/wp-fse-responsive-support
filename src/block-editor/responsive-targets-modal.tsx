@@ -10,8 +10,8 @@ import {
 	Notice,
 } from "@wordpress/components";
 import apiFetch from "@wordpress/api-fetch";
-import { listAttributeCandidates, normalizeTargets } from "./target-discovery";
-import { getActiveTargets, setActiveTargets } from "./target-discovery";
+import { listAttributeCandidates } from "./target-discovery";
+import { getActiveTargets, setActiveTargets } from "./targets-store";
 import type {
 	ExtendedWindow,
 	RuntimeSettings,
@@ -100,6 +100,9 @@ export const ResponsiveTargetsModal = () => {
 	const discovered = useMemo<DiscoverableBlock[]>(() => {
 		return blockTypes
 			.map((block: BlockType) => {
+				if (block.name === "core/group") {
+					console.log(block.attributes);
+				}
 				const attrs = listAttributeCandidates(
 					block.attributes || {},
 				) as ResponsiveTarget[];
@@ -114,7 +117,7 @@ export const ResponsiveTargetsModal = () => {
 
 	useEffect(() => {
 		const initial: SelectedMap = {};
-		(normalizeTargets(getActiveTargets()) as ResponsiveTarget[]).forEach(
+		(getActiveTargets() as ResponsiveTarget[]).forEach(
 			(target: ResponsiveTarget) => {
 				const key = `${target.block}|${target.path}`;
 				initial[key] = target;

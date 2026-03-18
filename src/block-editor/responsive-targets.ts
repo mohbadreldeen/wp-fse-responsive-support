@@ -31,6 +31,8 @@ const COLOR_ALIAS_CONFLICTS: Record<string, string[]> = {
 	backgroundColor: ["style.color.background"],
 	"style.color.text": ["textColor"],
 	textColor: ["style.color.text"],
+	"style.border.color": ["borderColor"],
+	borderColor: ["style.border.color"],
 };
 
 const colorAliasWriteAdapter: ResponsiveWriteAdapter = {

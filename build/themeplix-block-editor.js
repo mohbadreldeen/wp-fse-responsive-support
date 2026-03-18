@@ -162,6 +162,12 @@ const borderGeometryAdapter = {
     return target.path === "style.border.radius" || target.path === "style.border.width";
   },
   resolve(target, value) {
+    if (target.path === "style.border.width" && (typeof value === "string" || typeof value === "number")) {
+      return {
+        cssProperty: "border-width",
+        cssValue: value
+      };
+    }
     if (!(0,_utils__WEBPACK_IMPORTED_MODULE_0__.isObject)(value)) {
       return {
         skip: true
@@ -306,6 +312,9 @@ function cssPropertyForPath(path) {
   if (namespace === "color") {
     if (leaf === "text") return "color";
     if (leaf === "background") return "background-color";
+  }
+  if (namespace === "border") {
+    if (leaf === "color") return "border-color";
   }
   if (namespace === "spacing" && leaf === "blockGap") {
     return "gap";
@@ -484,10 +493,264 @@ const spacingObjectAdapter = {
 
 /***/ },
 
-/***/ "./src/block-editor/responsive-state-helpers.ts"
-/*!******************************************************!*\
-  !*** ./src/block-editor/responsive-state-helpers.ts ***!
-  \******************************************************/
+/***/ "./src/block-editor/responsive-targets-modal.tsx"
+/*!*******************************************************!*\
+  !*** ./src/block-editor/responsive-targets-modal.tsx ***!
+  \*******************************************************/
+(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
+
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   ResponsiveTargetsModal: () => (/* binding */ ResponsiveTargetsModal)
+/* harmony export */ });
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! react */ "react");
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(react__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var _wordpress_edit_post__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! @wordpress/edit-post */ "@wordpress/edit-post");
+/* harmony import */ var _wordpress_edit_post__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(_wordpress_edit_post__WEBPACK_IMPORTED_MODULE_1__);
+/* harmony import */ var _wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! @wordpress/i18n */ "@wordpress/i18n");
+/* harmony import */ var _wordpress_i18n__WEBPACK_IMPORTED_MODULE_2___default = /*#__PURE__*/__webpack_require__.n(_wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__);
+/* harmony import */ var _wordpress_data__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! @wordpress/data */ "@wordpress/data");
+/* harmony import */ var _wordpress_data__WEBPACK_IMPORTED_MODULE_3___default = /*#__PURE__*/__webpack_require__.n(_wordpress_data__WEBPACK_IMPORTED_MODULE_3__);
+/* harmony import */ var _wordpress_components__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! @wordpress/components */ "@wordpress/components");
+/* harmony import */ var _wordpress_components__WEBPACK_IMPORTED_MODULE_4___default = /*#__PURE__*/__webpack_require__.n(_wordpress_components__WEBPACK_IMPORTED_MODULE_4__);
+/* harmony import */ var _wordpress_api_fetch__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! @wordpress/api-fetch */ "@wordpress/api-fetch");
+/* harmony import */ var _wordpress_api_fetch__WEBPACK_IMPORTED_MODULE_5___default = /*#__PURE__*/__webpack_require__.n(_wordpress_api_fetch__WEBPACK_IMPORTED_MODULE_5__);
+/* harmony import */ var _target_discovery__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ./target-discovery */ "./src/block-editor/target-discovery.ts");
+/* harmony import */ var _targets_store__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! ./targets-store */ "./src/block-editor/targets-store.ts");
+/* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(/*! react/jsx-runtime */ "react/jsx-runtime");
+/* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_8___default = /*#__PURE__*/__webpack_require__.n(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_8__);
+
+
+
+
+
+
+
+
+
+const HeaderToolbarButton = _wordpress_edit_post__WEBPACK_IMPORTED_MODULE_1__?.PluginToolbarButton;
+const runtimeSettings = window?.responsiveOverridesSettings || {};
+const ResponsiveTargetsModal = () => {
+  const [isOpen, setIsOpen] = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false);
+  const [isSaving, setIsSaving] = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false);
+  const [search, setSearch] = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)("");
+  const [selectedMap, setSelectedMap] = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({});
+  const [feedback, setFeedback] = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null);
+  (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(() => {
+    if (HeaderToolbarButton) {
+      return undefined;
+    }
+    let buttonEl = null;
+    let intervalId = null;
+    const mountFallbackButton = () => {
+      if (buttonEl && document.body.contains(buttonEl)) {
+        return;
+      }
+      const headerSettings = document.querySelector(".editor-header .editor-header__settings");
+      if (!headerSettings) {
+        return;
+      }
+      buttonEl = document.createElement("button");
+      buttonEl.type = "button";
+      buttonEl.className = "components-button is-secondary";
+      buttonEl.textContent = (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__.__)("Responsive", "responsive-overrides");
+      buttonEl.style.marginLeft = "8px";
+      buttonEl.setAttribute("aria-label", (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__.__)("Responsive Overrides", "responsive-overrides"));
+      buttonEl.addEventListener("click", () => setIsOpen(true));
+      const previewDropdown = headerSettings.querySelector(".editor-post-preview-dropdown, .editor-preview-dropdown");
+      if (previewDropdown && previewDropdown.parentNode) {
+        previewDropdown.parentNode.insertBefore(buttonEl, previewDropdown.nextSibling);
+      } else {
+        headerSettings.appendChild(buttonEl);
+      }
+    };
+    mountFallbackButton();
+    intervalId = window.setInterval(mountFallbackButton, 1200);
+    return () => {
+      if (intervalId) {
+        window.clearInterval(intervalId);
+      }
+      if (buttonEl && buttonEl.parentNode) {
+        buttonEl.parentNode.removeChild(buttonEl);
+      }
+    };
+  }, []);
+  const blockTypes = (0,_wordpress_data__WEBPACK_IMPORTED_MODULE_3__.useSelect)(select => {
+    return select("core/blocks")?.getBlockTypes?.() || [];
+  }, []) || [];
+  const discovered = (0,react__WEBPACK_IMPORTED_MODULE_0__.useMemo)(() => {
+    return blockTypes.map(block => {
+      if (block.name === "core/group") {
+        console.log(block.attributes);
+      }
+      const attrs = (0,_target_discovery__WEBPACK_IMPORTED_MODULE_6__.listAttributeCandidates)(block.attributes || {});
+      return {
+        name: block.name,
+        title: block.title || block.name,
+        attributes: attrs
+      };
+    }).filter(block => block.attributes.length > 0);
+  }, [blockTypes]);
+  (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(() => {
+    const initial = {};
+    (0,_targets_store__WEBPACK_IMPORTED_MODULE_7__.getActiveTargets)().forEach(target => {
+      const key = `${target.block}|${target.path}`;
+      initial[key] = target;
+    });
+    setSelectedMap(initial);
+  }, [isOpen]);
+  const filteredBlocks = (0,react__WEBPACK_IMPORTED_MODULE_0__.useMemo)(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) {
+      return discovered;
+    }
+    return discovered.map(block => {
+      const matchesBlock = block.name.toLowerCase().includes(term) || block.title.toLowerCase().includes(term);
+      if (matchesBlock) {
+        return block;
+      }
+      const attrMatches = block.attributes.filter(attr => attr.path.toLowerCase().includes(term));
+      if (!attrMatches.length) {
+        return null;
+      }
+      return {
+        ...block,
+        attributes: attrMatches
+      };
+    }).filter(block => Boolean(block));
+  }, [discovered, search]);
+  const selectedCount = Object.keys(selectedMap).length;
+  const toggleSelection = (block, attr, isChecked) => {
+    const key = `${block.name}|${attr.path}`;
+    setSelectedMap(current => {
+      if (!isChecked) {
+        const next = {
+          ...current
+        };
+        delete next[key];
+        return next;
+      }
+      return {
+        ...current,
+        [key]: {
+          block: block.name,
+          path: attr.path,
+          valueKind: attr.valueKind,
+          leafKeys: attr.leafKeys || [],
+          mapper: attr.mapper || ""
+        }
+      };
+    });
+  };
+  const saveTargets = async () => {
+    setIsSaving(true);
+    setFeedback(null);
+    const payload = {
+      targets: Object.values(selectedMap)
+    };
+    try {
+      const response = await _wordpress_api_fetch__WEBPACK_IMPORTED_MODULE_5___default()({
+        path: runtimeSettings?.restPath || "/responsive-overrides/v1/targets",
+        method: "POST",
+        headers: {
+          "X-WP-Nonce": runtimeSettings?.nonce || ""
+        },
+        data: payload
+      });
+      const nextTargets = (0,_targets_store__WEBPACK_IMPORTED_MODULE_7__.setActiveTargets)(response?.targets || []);
+      if (runtimeSettings?.config) {
+        runtimeSettings.config.targets = nextTargets;
+      }
+      setFeedback({
+        status: "success",
+        message: (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__.__)("Responsive targets saved.", "responsive-overrides")
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__.__)("Failed to save responsive targets.", "responsive-overrides");
+      setFeedback({
+        status: "error",
+        message: errorMessage
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_8__.jsxs)(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_8__.Fragment, {
+    children: [HeaderToolbarButton ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_8__.jsx)(HeaderToolbarButton, {
+      icon: "smartphone",
+      label: (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__.__)("Responsive Overrides", "responsive-overrides"),
+      onClick: () => setIsOpen(true)
+    }) : null, isOpen && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_8__.jsxs)(_wordpress_components__WEBPACK_IMPORTED_MODULE_4__.Modal, {
+      title: (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__.__)("Responsive Target Settings", "responsive-overrides"),
+      onRequestClose: () => setIsOpen(false),
+      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_8__.jsx)(_wordpress_components__WEBPACK_IMPORTED_MODULE_4__.SearchControl, {
+        label: (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__.__)("Filter blocks or attributes", "responsive-overrides"),
+        value: search,
+        onChange: setSearch
+      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_8__.jsx)("p", {
+        children: (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__.__)("Select block attributes to make responsive per device.", "responsive-overrides")
+      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_8__.jsx)("p", {
+        children: `${selectedCount} ${(0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__.__)("attributes selected", "responsive-overrides")}`
+      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_8__.jsx)("div", {
+        style: {
+          maxHeight: "50vh",
+          overflow: "auto",
+          border: "1px solid #ddd",
+          padding: "8px"
+        },
+        children: filteredBlocks.map(block => /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_8__.jsxs)("div", {
+          style: {
+            marginBottom: "16px"
+          },
+          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_8__.jsx)("strong", {
+            children: block.title
+          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_8__.jsx)("code", {
+            style: {
+              display: "block",
+              marginBottom: "6px"
+            },
+            children: block.name
+          }), block.attributes.map(attr => {
+            const key = `${block.name}|${attr.path}`;
+            return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_8__.jsx)(_wordpress_components__WEBPACK_IMPORTED_MODULE_4__.CheckboxControl, {
+              label: `${attr.path} (${attr.valueKind})`,
+              checked: Boolean(selectedMap[key]),
+              onChange: isChecked => toggleSelection(block, attr, isChecked)
+            }, key);
+          })]
+        }, block.name))
+      }), feedback && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_8__.jsx)(_wordpress_components__WEBPACK_IMPORTED_MODULE_4__.Notice, {
+        status: feedback.status,
+        isDismissible: false,
+        children: feedback.message
+      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_8__.jsxs)("div", {
+        style: {
+          marginTop: "16px",
+          display: "flex",
+          gap: "8px"
+        },
+        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_8__.jsx)(_wordpress_components__WEBPACK_IMPORTED_MODULE_4__.Button, {
+          variant: "primary",
+          onClick: saveTargets,
+          isBusy: isSaving,
+          disabled: isSaving,
+          children: (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__.__)("Save Targets", "responsive-overrides")
+        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_8__.jsx)(_wordpress_components__WEBPACK_IMPORTED_MODULE_4__.Button, {
+          variant: "secondary",
+          onClick: () => setIsOpen(false),
+          children: (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__.__)("Close", "responsive-overrides")
+        })]
+      })]
+    })]
+  });
+};
+
+/***/ },
+
+/***/ "./src/block-editor/responsive-targets.ts"
+/*!************************************************!*\
+  !*** ./src/block-editor/responsive-targets.ts ***!
+  \************************************************/
 (__unused_webpack_module, __webpack_exports__, __webpack_require__) {
 
 __webpack_require__.r(__webpack_exports__);
@@ -512,7 +775,9 @@ const COLOR_ALIAS_CONFLICTS = {
   "style.color.background": ["backgroundColor"],
   backgroundColor: ["style.color.background"],
   "style.color.text": ["textColor"],
-  textColor: ["style.color.text"]
+  textColor: ["style.color.text"],
+  "style.border.color": ["borderColor"],
+  borderColor: ["style.border.color"]
 };
 const colorAliasWriteAdapter = {
   id: "color-alias-write-adapter",
@@ -602,256 +867,6 @@ const getResponsiveValue = (attributes, device, target) => {
 
 /***/ },
 
-/***/ "./src/block-editor/responsive-targets-modal.tsx"
-/*!*******************************************************!*\
-  !*** ./src/block-editor/responsive-targets-modal.tsx ***!
-  \*******************************************************/
-(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
-
-__webpack_require__.r(__webpack_exports__);
-/* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   ResponsiveTargetsModal: () => (/* binding */ ResponsiveTargetsModal)
-/* harmony export */ });
-/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! react */ "react");
-/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(react__WEBPACK_IMPORTED_MODULE_0__);
-/* harmony import */ var _wordpress_edit_post__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! @wordpress/edit-post */ "@wordpress/edit-post");
-/* harmony import */ var _wordpress_edit_post__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(_wordpress_edit_post__WEBPACK_IMPORTED_MODULE_1__);
-/* harmony import */ var _wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! @wordpress/i18n */ "@wordpress/i18n");
-/* harmony import */ var _wordpress_i18n__WEBPACK_IMPORTED_MODULE_2___default = /*#__PURE__*/__webpack_require__.n(_wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__);
-/* harmony import */ var _wordpress_data__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! @wordpress/data */ "@wordpress/data");
-/* harmony import */ var _wordpress_data__WEBPACK_IMPORTED_MODULE_3___default = /*#__PURE__*/__webpack_require__.n(_wordpress_data__WEBPACK_IMPORTED_MODULE_3__);
-/* harmony import */ var _wordpress_components__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! @wordpress/components */ "@wordpress/components");
-/* harmony import */ var _wordpress_components__WEBPACK_IMPORTED_MODULE_4___default = /*#__PURE__*/__webpack_require__.n(_wordpress_components__WEBPACK_IMPORTED_MODULE_4__);
-/* harmony import */ var _wordpress_api_fetch__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! @wordpress/api-fetch */ "@wordpress/api-fetch");
-/* harmony import */ var _wordpress_api_fetch__WEBPACK_IMPORTED_MODULE_5___default = /*#__PURE__*/__webpack_require__.n(_wordpress_api_fetch__WEBPACK_IMPORTED_MODULE_5__);
-/* harmony import */ var _target_discovery__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ./target-discovery */ "./src/block-editor/target-discovery.ts");
-/* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! react/jsx-runtime */ "react/jsx-runtime");
-/* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7___default = /*#__PURE__*/__webpack_require__.n(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__);
-
-
-
-
-
-
-
-
-
-const HeaderToolbarButton = _wordpress_edit_post__WEBPACK_IMPORTED_MODULE_1__?.PluginToolbarButton;
-const runtimeSettings = window?.responsiveOverridesSettings || {};
-const ResponsiveTargetsModal = () => {
-  const [isOpen, setIsOpen] = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false);
-  const [isSaving, setIsSaving] = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false);
-  const [search, setSearch] = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)("");
-  const [selectedMap, setSelectedMap] = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)({});
-  const [feedback, setFeedback] = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(null);
-  (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(() => {
-    if (HeaderToolbarButton) {
-      return undefined;
-    }
-    let buttonEl = null;
-    let intervalId = null;
-    const mountFallbackButton = () => {
-      if (buttonEl && document.body.contains(buttonEl)) {
-        return;
-      }
-      const headerSettings = document.querySelector(".editor-header .editor-header__settings");
-      if (!headerSettings) {
-        return;
-      }
-      buttonEl = document.createElement("button");
-      buttonEl.type = "button";
-      buttonEl.className = "components-button is-secondary";
-      buttonEl.textContent = (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__.__)("Responsive", "responsive-overrides");
-      buttonEl.style.marginLeft = "8px";
-      buttonEl.setAttribute("aria-label", (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__.__)("Responsive Overrides", "responsive-overrides"));
-      buttonEl.addEventListener("click", () => setIsOpen(true));
-      const previewDropdown = headerSettings.querySelector(".editor-post-preview-dropdown, .editor-preview-dropdown");
-      if (previewDropdown && previewDropdown.parentNode) {
-        previewDropdown.parentNode.insertBefore(buttonEl, previewDropdown.nextSibling);
-      } else {
-        headerSettings.appendChild(buttonEl);
-      }
-    };
-    mountFallbackButton();
-    intervalId = window.setInterval(mountFallbackButton, 1200);
-    return () => {
-      if (intervalId) {
-        window.clearInterval(intervalId);
-      }
-      if (buttonEl && buttonEl.parentNode) {
-        buttonEl.parentNode.removeChild(buttonEl);
-      }
-    };
-  }, []);
-  const blockTypes = (0,_wordpress_data__WEBPACK_IMPORTED_MODULE_3__.useSelect)(select => {
-    return select("core/blocks")?.getBlockTypes?.() || [];
-  }, []) || [];
-  const discovered = (0,react__WEBPACK_IMPORTED_MODULE_0__.useMemo)(() => {
-    return blockTypes.map(block => {
-      const attrs = (0,_target_discovery__WEBPACK_IMPORTED_MODULE_6__.listAttributeCandidates)(block.attributes || {});
-      return {
-        name: block.name,
-        title: block.title || block.name,
-        attributes: attrs
-      };
-    }).filter(block => block.attributes.length > 0);
-  }, [blockTypes]);
-  (0,react__WEBPACK_IMPORTED_MODULE_0__.useEffect)(() => {
-    const initial = {};
-    (0,_target_discovery__WEBPACK_IMPORTED_MODULE_6__.normalizeTargets)((0,_target_discovery__WEBPACK_IMPORTED_MODULE_6__.getActiveTargets)()).forEach(target => {
-      const key = `${target.block}|${target.path}`;
-      initial[key] = target;
-    });
-    setSelectedMap(initial);
-  }, [isOpen]);
-  const filteredBlocks = (0,react__WEBPACK_IMPORTED_MODULE_0__.useMemo)(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) {
-      return discovered;
-    }
-    return discovered.map(block => {
-      const matchesBlock = block.name.toLowerCase().includes(term) || block.title.toLowerCase().includes(term);
-      if (matchesBlock) {
-        return block;
-      }
-      const attrMatches = block.attributes.filter(attr => attr.path.toLowerCase().includes(term));
-      if (!attrMatches.length) {
-        return null;
-      }
-      return {
-        ...block,
-        attributes: attrMatches
-      };
-    }).filter(block => Boolean(block));
-  }, [discovered, search]);
-  const selectedCount = Object.keys(selectedMap).length;
-  const toggleSelection = (block, attr, isChecked) => {
-    const key = `${block.name}|${attr.path}`;
-    setSelectedMap(current => {
-      if (!isChecked) {
-        const next = {
-          ...current
-        };
-        delete next[key];
-        return next;
-      }
-      return {
-        ...current,
-        [key]: {
-          block: block.name,
-          path: attr.path,
-          valueKind: attr.valueKind,
-          leafKeys: attr.leafKeys || [],
-          mapper: attr.mapper || ""
-        }
-      };
-    });
-  };
-  const saveTargets = async () => {
-    setIsSaving(true);
-    setFeedback(null);
-    const payload = {
-      targets: Object.values(selectedMap)
-    };
-    try {
-      const response = await _wordpress_api_fetch__WEBPACK_IMPORTED_MODULE_5___default()({
-        path: runtimeSettings?.restPath || "/responsive-overrides/v1/targets",
-        method: "POST",
-        headers: {
-          "X-WP-Nonce": runtimeSettings?.nonce || ""
-        },
-        data: payload
-      });
-      const nextTargets = (0,_target_discovery__WEBPACK_IMPORTED_MODULE_6__.setActiveTargets)(response?.targets || []);
-      if (runtimeSettings?.config) {
-        runtimeSettings.config.targets = nextTargets;
-      }
-      setFeedback({
-        status: "success",
-        message: (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__.__)("Responsive targets saved.", "responsive-overrides")
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__.__)("Failed to save responsive targets.", "responsive-overrides");
-      setFeedback({
-        status: "error",
-        message: errorMessage
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-  return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsxs)(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.Fragment, {
-    children: [HeaderToolbarButton ? /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)(HeaderToolbarButton, {
-      icon: "smartphone",
-      label: (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__.__)("Responsive Overrides", "responsive-overrides"),
-      onClick: () => setIsOpen(true)
-    }) : null, isOpen && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsxs)(_wordpress_components__WEBPACK_IMPORTED_MODULE_4__.Modal, {
-      title: (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__.__)("Responsive Target Settings", "responsive-overrides"),
-      onRequestClose: () => setIsOpen(false),
-      children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)(_wordpress_components__WEBPACK_IMPORTED_MODULE_4__.SearchControl, {
-        label: (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__.__)("Filter blocks or attributes", "responsive-overrides"),
-        value: search,
-        onChange: setSearch
-      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)("p", {
-        children: (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__.__)("Select block attributes to make responsive per device.", "responsive-overrides")
-      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)("p", {
-        children: `${selectedCount} ${(0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__.__)("attributes selected", "responsive-overrides")}`
-      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)("div", {
-        style: {
-          maxHeight: "50vh",
-          overflow: "auto",
-          border: "1px solid #ddd",
-          padding: "8px"
-        },
-        children: filteredBlocks.map(block => /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsxs)("div", {
-          style: {
-            marginBottom: "16px"
-          },
-          children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)("strong", {
-            children: block.title
-          }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)("code", {
-            style: {
-              display: "block",
-              marginBottom: "6px"
-            },
-            children: block.name
-          }), block.attributes.map(attr => {
-            const key = `${block.name}|${attr.path}`;
-            return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)(_wordpress_components__WEBPACK_IMPORTED_MODULE_4__.CheckboxControl, {
-              label: `${attr.path} (${attr.valueKind})`,
-              checked: Boolean(selectedMap[key]),
-              onChange: isChecked => toggleSelection(block, attr, isChecked)
-            }, key);
-          })]
-        }, block.name))
-      }), feedback && /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)(_wordpress_components__WEBPACK_IMPORTED_MODULE_4__.Notice, {
-        status: feedback.status,
-        isDismissible: false,
-        children: feedback.message
-      }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsxs)("div", {
-        style: {
-          marginTop: "16px",
-          display: "flex",
-          gap: "8px"
-        },
-        children: [/*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)(_wordpress_components__WEBPACK_IMPORTED_MODULE_4__.Button, {
-          variant: "primary",
-          onClick: saveTargets,
-          isBusy: isSaving,
-          disabled: isSaving,
-          children: (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__.__)("Save Targets", "responsive-overrides")
-        }), /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)(_wordpress_components__WEBPACK_IMPORTED_MODULE_4__.Button, {
-          variant: "secondary",
-          onClick: () => setIsOpen(false),
-          children: (0,_wordpress_i18n__WEBPACK_IMPORTED_MODULE_2__.__)("Close", "responsive-overrides")
-        })]
-      })]
-    })]
-  });
-};
-
-/***/ },
-
 /***/ "./src/block-editor/target-discovery.ts"
 /*!**********************************************!*\
   !*** ./src/block-editor/target-discovery.ts ***!
@@ -860,11 +875,8 @@ const ResponsiveTargetsModal = () => {
 
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   activeTargets: () => (/* binding */ activeTargets),
-/* harmony export */   getActiveTargets: () => (/* binding */ getActiveTargets),
 /* harmony export */   listAttributeCandidates: () => (/* binding */ listAttributeCandidates),
-/* harmony export */   normalizeTargets: () => (/* binding */ normalizeTargets),
-/* harmony export */   setActiveTargets: () => (/* binding */ setActiveTargets)
+/* harmony export */   normalizeTargets: () => (/* binding */ normalizeTargets)
 /* harmony export */ });
 /* harmony import */ var _utils__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../utils */ "./src/utils/index.ts");
 /* harmony import */ var _color_utils__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./color-utils */ "./src/block-editor/color-utils.ts");
@@ -872,7 +884,56 @@ __webpack_require__.r(__webpack_exports__);
 
 const DEVICE_KEYS = ["desktop", "tablet", "mobile"];
 const DEFAULT_TARGETS = [];
-const runtimeSettings = window?.responsiveOverridesSettings || {};
+const DEFAULT_STYLE_TARGETS = [{
+  path: "style.spacing.padding",
+  valueKind: "object",
+  leafKeys: ["top", "right", "bottom", "left"],
+  mapper: "spacingPadding",
+  sourceKind: "generic",
+  channel: undefined
+}, {
+  path: "style.spacing.margin",
+  valueKind: "object",
+  leafKeys: ["top", "right", "bottom", "left"],
+  mapper: "spacingMargin",
+  sourceKind: "generic",
+  channel: undefined
+}, {
+  path: "style.color.text",
+  valueKind: "scalar",
+  leafKeys: [],
+  mapper: "textColor",
+  sourceKind: "style-value",
+  channel: "text"
+}, {
+  path: "style.color.background",
+  valueKind: "scalar",
+  leafKeys: [],
+  mapper: "backgroundColor",
+  sourceKind: "style-value",
+  channel: "background"
+}, {
+  path: "style.border.radius",
+  valueKind: "object",
+  leafKeys: ["topLeft", "topRight", "bottomRight", "bottomLeft"],
+  mapper: "borderRadius",
+  sourceKind: "generic",
+  channel: undefined
+}, {
+  path: "style.border.width",
+  valueKind: "scalar",
+  leafKeys: [],
+  mapper: "borderWidth",
+  sourceKind: "generic",
+  channel: undefined
+}, {
+  path: "style.border.color",
+  valueKind: "scalar",
+  leafKeys: [],
+  mapper: "borderColor",
+  sourceKind: "generic",
+  channel: undefined
+}];
 const normalizeTargets = rawTargets => {
   if (!Array.isArray(rawTargets) || !rawTargets.length) {
     return (0,_utils__WEBPACK_IMPORTED_MODULE_0__.clone)(DEFAULT_TARGETS);
@@ -934,35 +995,7 @@ const listAttributeCandidates = (attributes, pathPrefix = "", depth = 0) => {
 
   // Always include well-known style paths regardless of schema discovery
   if (depth === 0 && !pathPrefix) {
-    candidates.push({
-      path: "style.spacing.padding",
-      valueKind: "object",
-      leafKeys: ["top", "right", "bottom", "left"],
-      mapper: "spacingPadding",
-      sourceKind: "generic",
-      channel: undefined
-    }, {
-      path: "style.spacing.margin",
-      valueKind: "object",
-      leafKeys: ["top", "right", "bottom", "left"],
-      mapper: "spacingMargin",
-      sourceKind: "generic",
-      channel: undefined
-    }, {
-      path: "style.color.text",
-      valueKind: "scalar",
-      leafKeys: [],
-      mapper: "textColor",
-      sourceKind: "style-value",
-      channel: "text"
-    }, {
-      path: "style.color.background",
-      valueKind: "scalar",
-      leafKeys: [],
-      mapper: "backgroundColor",
-      sourceKind: "style-value",
-      channel: "background"
-    });
+    candidates.push(...DEFAULT_STYLE_TARGETS);
   }
   Object.entries(attributes).forEach(([attrName, schema]) => {
     const path = pathPrefix ? `${pathPrefix}.${attrName}` : attrName;
@@ -978,18 +1011,25 @@ const listAttributeCandidates = (attributes, pathPrefix = "", depth = 0) => {
     if (type === "object" && (0,_utils__WEBPACK_IMPORTED_MODULE_0__.isObject)(schema?.properties)) {
       if (!forbiddenPaths.has(path)) {
         const colorMeta = (0,_color_utils__WEBPACK_IMPORTED_MODULE_1__.getColorTargetMeta)(path);
+        const mapper = (0,_utils__WEBPACK_IMPORTED_MODULE_0__.getMapperForPath)(path);
         const leafKeys = Object.entries(schema.properties).filter(([, childSchema]) => {
           const childType = childSchema?.type;
           return childType === "string" || childType === "number" || childType === "boolean";
         }).map(([key]) => key);
-        candidates.push({
-          path,
-          valueKind: "object",
-          leafKeys,
-          mapper: (0,_utils__WEBPACK_IMPORTED_MODULE_0__.getMapperForPath)(path),
-          sourceKind: colorMeta.sourceKind,
-          channel: colorMeta.channel
-        });
+
+        // Only expose object paths that are directly actionable.
+        // This avoids surfacing container/typo paths like `style.brder`
+        // that have nested children but no usable direct value contract.
+        if (leafKeys.length || mapper || colorMeta.channel) {
+          candidates.push({
+            path,
+            valueKind: "object",
+            leafKeys,
+            mapper,
+            sourceKind: colorMeta.sourceKind,
+            channel: colorMeta.channel
+          });
+        }
       }
       candidates.push(...listAttributeCandidates(schema.properties, path, depth + 1));
       return;
@@ -1014,20 +1054,83 @@ const listAttributeCandidates = (attributes, pathPrefix = "", depth = 0) => {
   });
 
   // Deduplicate by path
-  const seen = new Set();
-  return candidates.filter(candidate => {
-    if (seen.has(candidate.path)) {
-      return false;
-    }
-    seen.add(candidate.path);
-    return true;
+  const deduped = new Map();
+  candidates.forEach(candidate => {
+    deduped.set(candidate.path, candidate);
   });
+  return Array.from(deduped.values());
 };
-let activeTargets = normalizeTargets(runtimeSettings?.config?.targets);
-const getActiveTargets = () => activeTargets;
+
+/***/ },
+
+/***/ "./src/block-editor/targets-store.ts"
+/*!*******************************************!*\
+  !*** ./src/block-editor/targets-store.ts ***!
+  \*******************************************/
+(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
+
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   ACTIVE_TARGETS_STORE_NAME: () => (/* binding */ ACTIVE_TARGETS_STORE_NAME),
+/* harmony export */   getActiveTargets: () => (/* binding */ getActiveTargets),
+/* harmony export */   setActiveTargets: () => (/* binding */ setActiveTargets),
+/* harmony export */   useActiveTargets: () => (/* binding */ useActiveTargets)
+/* harmony export */ });
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! react */ "react");
+/* harmony import */ var react__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(react__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var _wordpress_data__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! @wordpress/data */ "@wordpress/data");
+/* harmony import */ var _wordpress_data__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(_wordpress_data__WEBPACK_IMPORTED_MODULE_1__);
+/* harmony import */ var _target_discovery__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./target-discovery */ "./src/block-editor/target-discovery.ts");
+
+
+
+const runtimeSettings = window?.responsiveOverridesSettings || {};
+const ACTIVE_TARGETS_STORE_NAME = "responsive-overrides/active-targets";
+const DEFAULT_ACTIVE_TARGETS_STATE = {
+  targets: (0,_target_discovery__WEBPACK_IMPORTED_MODULE_2__.normalizeTargets)(runtimeSettings?.config?.targets)
+};
+const activeTargetsStore = (0,_wordpress_data__WEBPACK_IMPORTED_MODULE_1__.createReduxStore)(ACTIVE_TARGETS_STORE_NAME, {
+  reducer(state = DEFAULT_ACTIVE_TARGETS_STATE, action) {
+    switch (action.type) {
+      case "SET_ACTIVE_TARGETS":
+        return {
+          ...state,
+          targets: (0,_target_discovery__WEBPACK_IMPORTED_MODULE_2__.normalizeTargets)(action.rawTargets)
+        };
+      default:
+        return state;
+    }
+  },
+  actions: {
+    setActiveTargets(rawTargets) {
+      return {
+        type: "SET_ACTIVE_TARGETS",
+        rawTargets
+      };
+    }
+  },
+  selectors: {
+    getActiveTargets(state) {
+      return state.targets;
+    }
+  }
+});
+(0,_wordpress_data__WEBPACK_IMPORTED_MODULE_1__.register)(activeTargetsStore);
+const getActiveTargets = () => {
+  return (0,_wordpress_data__WEBPACK_IMPORTED_MODULE_1__.select)(ACTIVE_TARGETS_STORE_NAME)?.getActiveTargets?.() || [];
+};
 const setActiveTargets = rawTargets => {
-  activeTargets = normalizeTargets(rawTargets);
-  return activeTargets;
+  (0,_wordpress_data__WEBPACK_IMPORTED_MODULE_1__.dispatch)(ACTIVE_TARGETS_STORE_NAME).setActiveTargets(rawTargets);
+  return getActiveTargets();
+};
+const useActiveTargets = blockName => {
+  const targets = (0,_wordpress_data__WEBPACK_IMPORTED_MODULE_1__.useSelect)(selectRegistry => selectRegistry(ACTIVE_TARGETS_STORE_NAME)?.getActiveTargets?.() || [], []);
+  return (0,react__WEBPACK_IMPORTED_MODULE_0__.useMemo)(() => {
+    if (!blockName) {
+      return targets;
+    }
+    return targets.filter(target => target.block === blockName);
+  }, [targets, blockName]);
 };
 
 /***/ },
@@ -1051,8 +1154,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _wordpress_data__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! @wordpress/data */ "@wordpress/data");
 /* harmony import */ var _wordpress_data__WEBPACK_IMPORTED_MODULE_3___default = /*#__PURE__*/__webpack_require__.n(_wordpress_data__WEBPACK_IMPORTED_MODULE_3__);
 /* harmony import */ var _utils__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ../utils */ "./src/utils/index.ts");
-/* harmony import */ var _target_discovery__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./target-discovery */ "./src/block-editor/target-discovery.ts");
-/* harmony import */ var _responsive_state_helpers__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ./responsive-state-helpers */ "./src/block-editor/responsive-state-helpers.ts");
+/* harmony import */ var _targets_store__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./targets-store */ "./src/block-editor/targets-store.ts");
+/* harmony import */ var _responsive_targets__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ./responsive-targets */ "./src/block-editor/responsive-targets.ts");
 /* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! react/jsx-runtime */ "react/jsx-runtime");
 /* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7___default = /*#__PURE__*/__webpack_require__.n(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__);
 
@@ -1063,7 +1166,6 @@ __webpack_require__.r(__webpack_exports__);
 
 
 
-const getTargetsForBlock = blockName => (0,_target_discovery__WEBPACK_IMPORTED_MODULE_5__.getActiveTargets)().filter(target => target.block === blockName);
 const setValueAtPath = (object, path, value) => {
   if (!path) {
     return object;
@@ -1106,7 +1208,7 @@ const hasPathInObject = (object, path) => {
 };
 const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.createHigherOrderComponent)(BlockEdit => {
   return props => {
-    const targets = getTargetsForBlock(props.name);
+    const targets = (0,_targets_store__WEBPACK_IMPORTED_MODULE_5__.useActiveTargets)(props.name);
     if (!targets.length) {
       return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)(BlockEdit, {
         ...props
@@ -1132,13 +1234,13 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
       let nextResponsiveStyles = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(attrsRef.current?.responsiveStyles || {});
       let needsUpdate = false;
       targets.forEach(target => {
-        const desktopValue = (0,_responsive_state_helpers__WEBPACK_IMPORTED_MODULE_6__.getResponsiveValue)({
+        const desktopValue = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.getResponsiveValue)({
           responsiveStyles: nextResponsiveStyles
         }, "desktop", target);
         if (desktopValue === undefined) {
           const liveValue = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.getValueAtPath)(attrsRef.current, target.path);
           if (liveValue !== undefined) {
-            nextResponsiveStyles = (0,_responsive_state_helpers__WEBPACK_IMPORTED_MODULE_6__.setResponsiveValue)({
+            nextResponsiveStyles = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.setResponsiveValue)({
               responsiveStyles: nextResponsiveStyles
             }, "desktop", target, liveValue);
             needsUpdate = true;
@@ -1167,18 +1269,18 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
       targets.forEach(target => {
         const liveValue = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.getValueAtPath)(attrsRef.current, target.path);
         if (liveValue === undefined) {
-          nextResponsiveStyles = (0,_responsive_state_helpers__WEBPACK_IMPORTED_MODULE_6__.removeResponsiveValue)({
+          nextResponsiveStyles = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.removeResponsiveValue)({
             responsiveStyles: nextResponsiveStyles
           }, previousDevice, target);
           return;
         }
-        nextResponsiveStyles = (0,_responsive_state_helpers__WEBPACK_IMPORTED_MODULE_6__.setResponsiveValue)({
+        nextResponsiveStyles = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.setResponsiveValue)({
           responsiveStyles: nextResponsiveStyles
         }, previousDevice, target, liveValue);
       });
       const nextAttributes = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(attrsRef.current);
       targets.forEach(target => {
-        const currentDeviceValue = (0,_responsive_state_helpers__WEBPACK_IMPORTED_MODULE_6__.getResponsiveValue)({
+        const currentDeviceValue = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.getResponsiveValue)({
           responsiveStyles: nextResponsiveStyles
         }, device, target);
         setValueAtPath(nextAttributes, target.path, currentDeviceValue === undefined ? undefined : (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(currentDeviceValue));
@@ -1188,6 +1290,7 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
       setAttributes(nextAttributes);
       requestAnimationFrame(() => {
         isSyncingRef.current = false;
+        console.log("Screen changed: ", nextAttributes);
       });
     }, [device]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1209,7 +1312,7 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
         }
         if (incomingValue === undefined) {
           hasResponsiveChange = true;
-          nextResponsiveStyles = (0,_responsive_state_helpers__WEBPACK_IMPORTED_MODULE_6__.removeResponsiveValue)({
+          nextResponsiveStyles = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.removeResponsiveValue)({
             responsiveStyles: nextResponsiveStyles
           }, device, target);
           return;
@@ -1218,7 +1321,7 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
           return;
         }
         hasResponsiveChange = true;
-        nextResponsiveStyles = (0,_responsive_state_helpers__WEBPACK_IMPORTED_MODULE_6__.setResponsiveValue)({
+        nextResponsiveStyles = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.setResponsiveValue)({
           responsiveStyles: nextResponsiveStyles
         }, device, target, incomingValue);
       });
@@ -1229,6 +1332,12 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
       setAttributes({
         ...newAttrs,
         responsiveStyles: nextResponsiveStyles
+      });
+      requestAnimationFrame(() => {
+        console.log("Attribute Changed", {
+          ...newAttrs,
+          responsiveStyles: nextResponsiveStyles
+        });
       });
     };
     return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)(BlockEdit, {
@@ -1255,7 +1364,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _wordpress_data__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! @wordpress/data */ "@wordpress/data");
 /* harmony import */ var _wordpress_data__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(_wordpress_data__WEBPACK_IMPORTED_MODULE_1__);
 /* harmony import */ var _utils__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ../utils */ "./src/utils/index.ts");
-/* harmony import */ var _target_discovery__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./target-discovery */ "./src/block-editor/target-discovery.ts");
+/* harmony import */ var _targets_store__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./targets-store */ "./src/block-editor/targets-store.ts");
 /* harmony import */ var _preview_adapter_registry__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./preview-adapter-registry */ "./src/block-editor/preview-adapter-registry.ts");
 /* harmony import */ var _preview_adapters_index__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./preview-adapters/index */ "./src/block-editor/preview-adapters/index.ts");
 /* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! react/jsx-runtime */ "react/jsx-runtime");
@@ -1268,10 +1377,9 @@ __webpack_require__.r(__webpack_exports__);
 
 
 
-const getTargetsForBlock = blockName => (0,_target_discovery__WEBPACK_IMPORTED_MODULE_3__.getActiveTargets)().filter(t => t.block === blockName);
 const withResponsivePreview = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_0__.createHigherOrderComponent)(BlockListBlock => {
   return props => {
-    const targets = getTargetsForBlock(props.name);
+    const targets = (0,_targets_store__WEBPACK_IMPORTED_MODULE_3__.useActiveTargets)(props.name);
     if (!targets.length) {
       return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)(BlockListBlock, {
         ...props
@@ -1361,7 +1469,10 @@ const SUPPORTED_PATH_TO_MAPPER = {
   "style.spacing.padding": "spacingPadding",
   "style.spacing.margin": "spacingMargin",
   "style.color.text": "textColor",
-  "style.color.background": "backgroundColor"
+  "style.color.background": "backgroundColor",
+  "style.border.radius": "borderRadius",
+  "style.border.width": "borderWidth",
+  "style.border.color": "borderColor"
 };
 
 /**

@@ -1,15 +1,67 @@
 import { clone, normalizePath, getMapperForPath, isObject } from "../utils";
 import { getColorTargetMeta } from "./color-utils";
+import { ResponsiveTarget } from "./types";
 
 const DEVICE_KEYS = ["desktop", "tablet", "mobile"];
 const DEFAULT_TARGETS: string[] = [];
-
-const runtimeSettings =
-	(
-		window as Window & {
-			responsiveOverridesSettings?: Record<string, any>;
-		}
-	)?.responsiveOverridesSettings || {};
+const DEFAULT_STYLE_TARGETS = [
+	{
+		path: "style.spacing.padding",
+		valueKind: "object",
+		leafKeys: ["top", "right", "bottom", "left"],
+		mapper: "spacingPadding",
+		sourceKind: "generic",
+		channel: undefined,
+	},
+	{
+		path: "style.spacing.margin",
+		valueKind: "object",
+		leafKeys: ["top", "right", "bottom", "left"],
+		mapper: "spacingMargin",
+		sourceKind: "generic",
+		channel: undefined,
+	},
+	{
+		path: "style.color.text",
+		valueKind: "scalar",
+		leafKeys: [],
+		mapper: "textColor",
+		sourceKind: "style-value",
+		channel: "text",
+	},
+	{
+		path: "style.color.background",
+		valueKind: "scalar",
+		leafKeys: [],
+		mapper: "backgroundColor",
+		sourceKind: "style-value",
+		channel: "background",
+	},
+	{
+		path: "style.border.radius",
+		valueKind: "object",
+		leafKeys: ["topLeft", "topRight", "bottomRight", "bottomLeft"],
+		mapper: "borderRadius",
+		sourceKind: "generic",
+		channel: undefined,
+	},
+	{
+		path: "style.border.width",
+		valueKind: "scalar",
+		leafKeys: [],
+		mapper: "borderWidth",
+		sourceKind: "generic",
+		channel: undefined,
+	},
+	{
+		path: "style.border.color",
+		valueKind: "scalar",
+		leafKeys: [],
+		mapper: "borderColor",
+		sourceKind: "generic",
+		channel: undefined,
+	},
+];
 
 export const normalizeTargets = (rawTargets: any) => {
 	if (!Array.isArray(rawTargets) || !rawTargets.length) {
@@ -106,40 +158,7 @@ export const listAttributeCandidates = (
 
 	// Always include well-known style paths regardless of schema discovery
 	if (depth === 0 && !pathPrefix) {
-		candidates.push(
-			{
-				path: "style.spacing.padding",
-				valueKind: "object",
-				leafKeys: ["top", "right", "bottom", "left"],
-				mapper: "spacingPadding",
-				sourceKind: "generic",
-				channel: undefined,
-			},
-			{
-				path: "style.spacing.margin",
-				valueKind: "object",
-				leafKeys: ["top", "right", "bottom", "left"],
-				mapper: "spacingMargin",
-				sourceKind: "generic",
-				channel: undefined,
-			},
-			{
-				path: "style.color.text",
-				valueKind: "scalar",
-				leafKeys: [],
-				mapper: "textColor",
-				sourceKind: "style-value",
-				channel: "text",
-			},
-			{
-				path: "style.color.background",
-				valueKind: "scalar",
-				leafKeys: [],
-				mapper: "backgroundColor",
-				sourceKind: "style-value",
-				channel: "background",
-			},
-		);
+		candidates.push(...DEFAULT_STYLE_TARGETS);
 	}
 
 	Object.entries(attributes).forEach(([attrName, schema]) => {
@@ -158,6 +177,7 @@ export const listAttributeCandidates = (
 		if (type === "object" && isObject(schema?.properties)) {
 			if (!forbiddenPaths.has(path)) {
 				const colorMeta = getColorTargetMeta(path);
+				const mapper = getMapperForPath(path);
 				const leafKeys = Object.entries(schema.properties)
 					.filter(([, childSchema]: [string, any]) => {
 						const childType = childSchema?.type;
@@ -169,14 +189,19 @@ export const listAttributeCandidates = (
 					})
 					.map(([key]) => key);
 
-				candidates.push({
-					path,
-					valueKind: "object",
-					leafKeys,
-					mapper: getMapperForPath(path),
-					sourceKind: colorMeta.sourceKind,
-					channel: colorMeta.channel,
-				});
+				// Only expose object paths that are directly actionable.
+				// This avoids surfacing container/typo paths like `style.brder`
+				// that have nested children but no usable direct value contract.
+				if (leafKeys.length || mapper || colorMeta.channel) {
+					candidates.push({
+						path,
+						valueKind: "object",
+						leafKeys,
+						mapper,
+						sourceKind: colorMeta.sourceKind,
+						channel: colorMeta.channel,
+					});
+				}
 			}
 
 			candidates.push(
@@ -208,21 +233,10 @@ export const listAttributeCandidates = (
 	});
 
 	// Deduplicate by path
-	const seen = new Set();
-	return candidates.filter((candidate) => {
-		if (seen.has(candidate.path)) {
-			return false;
-		}
-		seen.add(candidate.path);
-		return true;
+	const deduped = new Map();
+	candidates.forEach((candidate) => {
+		deduped.set(candidate.path, candidate);
 	});
-};
 
-export let activeTargets = normalizeTargets(runtimeSettings?.config?.targets);
-
-export const getActiveTargets = () => activeTargets;
-
-export const setActiveTargets = (rawTargets: unknown[]) => {
-	activeTargets = normalizeTargets(rawTargets);
-	return activeTargets;
+	return Array.from(deduped.values());
 };

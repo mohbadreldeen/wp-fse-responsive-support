@@ -3,18 +3,13 @@ import { createHigherOrderComponent } from "@wordpress/compose";
 import { useEffect, useRef } from "@wordpress/element";
 import { useSelect } from "@wordpress/data";
 import { clone, isObject, getValueAtPath } from "../utils";
-import { getActiveTargets } from "./target-discovery";
+import { useActiveTargets } from "./targets-store";
 import { ResponsiveTarget } from "./types";
 import {
 	getResponsiveValue,
 	removeResponsiveValue,
 	setResponsiveValue,
-} from "./responsive-state-helpers";
-
-const getTargetsForBlock = (blockName: string): ResponsiveTarget[] =>
-	(getActiveTargets() as ResponsiveTarget[]).filter(
-		(target: ResponsiveTarget) => target.block === blockName,
-	);
+} from "./responsive-targets";
 
 const setValueAtPath = (
 	object: Record<string, any>,
@@ -71,7 +66,7 @@ const hasPathInObject = (
 export const withResponsiveLogic = createHigherOrderComponent(
 	(BlockEdit: any) => {
 		return (props: any) => {
-			const targets = getTargetsForBlock(props.name);
+			const targets = useActiveTargets(props.name);
 
 			if (!targets.length) {
 				return <BlockEdit {...props} />;
@@ -194,6 +189,7 @@ export const withResponsiveLogic = createHigherOrderComponent(
 				setAttributes(nextAttributes);
 				requestAnimationFrame(() => {
 					isSyncingRef.current = false;
+					console.log("Screen changed: ", nextAttributes);
 				});
 			}, [device]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -250,6 +246,12 @@ export const withResponsiveLogic = createHigherOrderComponent(
 				setAttributes({
 					...newAttrs,
 					responsiveStyles: nextResponsiveStyles,
+				});
+				requestAnimationFrame(() => {
+					console.log("Attribute Changed", {
+						...newAttrs,
+						responsiveStyles: nextResponsiveStyles,
+					});
 				});
 			};
 

@@ -1,7 +1,7 @@
 import { createHigherOrderComponent } from "@wordpress/compose";
 import { useSelect } from "@wordpress/data";
 import { cssPropToJsProp } from "../utils";
-import { getActiveTargets } from "./target-discovery";
+import { useActiveTargets } from "./targets-store";
 import { getResponsiveValue } from "../utils";
 import { previewAdapterRegistry } from "./preview-adapter-registry";
 import "./preview-adapters/index";
@@ -10,16 +10,10 @@ import type {
 	ResolvedChannels,
 	AdapterResolveResult,
 } from "./types";
-
-const getTargetsForBlock = (blockName: string): ResponsiveTarget[] =>
-	(getActiveTargets() as ResponsiveTarget[]).filter(
-		(t: ResponsiveTarget) => t.block === blockName,
-	);
-
 export const withResponsivePreview = createHigherOrderComponent(
 	(BlockListBlock: any) => {
 		return (props: any) => {
-			const targets = getTargetsForBlock(props.name);
+			const targets = useActiveTargets(props.name);
 			if (!targets.length) {
 				return <BlockListBlock {...props} />;
 			}

@@ -60,6 +60,13 @@ export const borderGeometryAdapter: PreviewAdapter = {
 	},
 
 	resolve(target: ResponsiveTarget, value: unknown): AdapterResolveResult {
+		if (
+			target.path === "style.border.width" &&
+			(typeof value === "string" || typeof value === "number")
+		) {
+			return { cssProperty: "border-width", cssValue: value };
+		}
+
 		if (!isObject(value)) {
 			return { skip: true };
 		}

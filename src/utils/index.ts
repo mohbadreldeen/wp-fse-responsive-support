@@ -3,6 +3,9 @@ const SUPPORTED_PATH_TO_MAPPER: Record<string, string> = {
 	"style.spacing.margin": "spacingMargin",
 	"style.color.text": "textColor",
 	"style.color.background": "backgroundColor",
+	"style.border.radius": "borderRadius",
+	"style.border.width": "borderWidth",
+	"style.border.color": "borderColor",
 };
 
 /**

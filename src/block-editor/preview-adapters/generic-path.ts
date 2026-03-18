@@ -36,6 +36,10 @@ function cssPropertyForPath(path: string): string {
 		if (leaf === "background") return "background-color";
 	}
 
+	if (namespace === "border") {
+		if (leaf === "color") return "border-color";
+	}
+
 	if (namespace === "spacing" && leaf === "blockGap") {
 		return "gap";
 	}
