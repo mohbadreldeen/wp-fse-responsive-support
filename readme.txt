@@ -6,50 +6,51 @@ Stable tag:        0.1.0
 License:           GPL-2.0-or-later
 License URI:       https://www.gnu.org/licenses/gpl-2.0.html
 
-Example block scaffolded with Create Block tool.
+Responsive Overrides adds editor-side responsive target selection and per-device attribute storage for supported Gutenberg block attributes.
 
 == Description ==
 
-This is the long description. No limit, and you can use Markdown (as well as in the following sections).
+The plugin currently includes:
 
-For backwards compatibility, if this section is missing, the full length of the short description will be used, and
-Markdown parsed.
+* responsive target discovery for supported block attributes
+* editor logic that syncs live block attributes with responsiveStyles per device
+* preview adapters that apply stored responsive values while switching between Desktop, Tablet, and Mobile previews
+
+== Development ==
+
+Use npm for local development in this repository.
+
+1. Install dependencies with npm install
+2. Start the editor build in watch mode with npm run start
+3. Create a production build with npm run build
+4. Run unit tests with npm run test:unit
+5. Build a distributable plugin zip with npm run plugin-zip
 
 == Installation ==
 
-This section describes how to install the plugin and get it working.
-
-e.g.
-
-1. Upload the plugin files to the `/wp-content/plugins/responsive-overrides` directory, or install the plugin through the WordPress plugins screen directly.
-1. Activate the plugin through the 'Plugins' screen in WordPress
-
+1. Upload the plugin files to the /wp-content/plugins/responsive-overrides directory, or install the plugin through the WordPress plugins screen directly.
+2. Activate the plugin through the Plugins screen in WordPress.
 
 == Frequently Asked Questions ==
 
-= A question that someone might have =
+= How do I start development? =
 
-An answer to that question.
+Install dependencies with npm install, then run npm run start to watch and rebuild editor assets.
 
-= What about foo bar? =
+= How do I run tests? =
 
-Answer to foo bar dilemma.
+Run npm run test:unit.
 
 == Screenshots ==
 
-1. This screen shot description corresponds to screenshot-1.(png|jpg|jpeg|gif). Note that the screenshot is taken from
-the /assets directory or the directory that contains the stable readme.txt (tags or trunk). Screenshots in the /assets
-directory take precedence. For example, `/assets/screenshot-1.png` would win over `/tags/4.3/screenshot-1.png`
-(or jpg, jpeg, gif).
-2. This is the second screen shot
+1. Responsive target selection in the block editor.
+2. Device-specific preview behavior for stored responsive values.
 
 == Changelog ==
 
 = 0.1.0 =
 * Release
 
-== Arbitrary section ==
+== Build Notes ==
 
-You may provide arbitrary sections, in the same format as the ones above. This may be of use for extremely complicated
-plugins where more information needs to be conveyed that doesn't fit into the categories of "description" or
-"installation." Arbitrary sections will be shown below the built-in sections outlined above.
+Editor assets are generated from the source files in src/ using the npm scripts defined in package.json.

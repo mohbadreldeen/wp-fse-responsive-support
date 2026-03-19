@@ -13,7 +13,9 @@ The wrapper only activates when `useActiveTargets( props.name )` returns one or 
 
 ## 2. Helper Behavior
 
-The file defines two local helpers that are part of the current flow:
+The file now separates the sync flow into small local helpers.
+
+Low-level path helpers:
 
 - `setValueAtPath( object, path, value )`
   - Walks a dot-path and writes the value into the cloned attributes object.
@@ -22,6 +24,19 @@ The file defines two local helpers that are part of the current flow:
 - `hasPathInObject( object, path )`
   - Returns `true` only when every segment of the dot-path exists as an own property.
   - This is used to decide whether an intercepted `setAttributes` payload is touching a responsive target.
+
+Sync helpers:
+
+- `buildMountSyncAttributes( attributes, targets )`
+  - Produces the initial desktop-seeded attribute payload for mount-time hydration.
+- `buildDeviceSyncAttributes( attributes, targets, previousDevice, device )`
+  - Produces the payload used when the editor preview device changes.
+- `buildResponsiveAttributeUpdate( attributes, newAttrs, device, targets )`
+  - Produces the next `setAttributes` payload for user-driven edits when responsive targets changed.
+- `scheduleSyncReset( syncRef )`
+  - Clears the internal syncing guard on the next animation frame.
+
+The current implementation uses these helpers to keep the HOC body focused on orchestration rather than inline data mutation.
 
 ## 3. Device Resolution
 
@@ -118,12 +133,9 @@ The current implementation uses refs to coordinate sync behavior without rerende
 
 ## 8. Current Side Effects And Diagnostics
 
-The file currently includes `console.log` calls in two places:
+The file currently does not emit dedicated diagnostic logging.
 
-- after device-switch synchronization
-- inside `interceptedSetAttributes`
-
-These logs are part of the current behavior and should be considered temporary diagnostics rather than a formal API.
+The remaining runtime side effect is the scheduled reset of `isSyncingRef` via `requestAnimationFrame`, which is used to prevent the component from reprocessing its own internal synchronization writes.
 
 ## 9. Working Mental Model
 

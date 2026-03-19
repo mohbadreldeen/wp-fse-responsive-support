@@ -1172,31 +1172,6 @@ __webpack_require__.r(__webpack_exports__);
 
 
 
-const setValueAtPath = (object, path, value) => {
-  if (!path) {
-    return object;
-  }
-  const segments = path.split(".");
-  let cursor = object;
-  segments.forEach((segment, index) => {
-    if (index === segments.length - 1) {
-      if ((0,_utils__WEBPACK_IMPORTED_MODULE_4__.isObject)(cursor[segment]) && (0,_utils__WEBPACK_IMPORTED_MODULE_4__.isObject)(value)) {
-        cursor[segment] = {
-          ...cursor[segment],
-          ...value
-        };
-      } else {
-        cursor[segment] = value;
-      }
-      return;
-    }
-    if (!(0,_utils__WEBPACK_IMPORTED_MODULE_4__.isObject)(cursor[segment])) {
-      cursor[segment] = {};
-    }
-    cursor = cursor[segment];
-  });
-  return object;
-};
 const hasPathInObject = (object, path) => {
   if (!(0,_utils__WEBPACK_IMPORTED_MODULE_4__.isObject)(object) || !path) {
     return false;
@@ -1211,6 +1186,101 @@ const hasPathInObject = (object, path) => {
     cursor = cursor[segment];
   }
   return true;
+};
+const cloneResponsiveStyles = attributes => (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(attributes?.responsiveStyles || {});
+const writeResponsiveValue = (responsiveStyles, device, target, value) => {
+  if (value === undefined) {
+    return (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.removeResponsiveValue)({
+      responsiveStyles
+    }, device, target);
+  }
+  return (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.setResponsiveValue)({
+    responsiveStyles
+  }, device, target, value);
+};
+const areValuesEqual = (left, right) => {
+  if (left === right) {
+    return true;
+  }
+  return JSON.stringify(left) === JSON.stringify(right);
+};
+const buildMountSyncAttributes = (attributes, targets) => {
+  const nextAttributes = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(attributes);
+  let nextResponsiveStyles = cloneResponsiveStyles(attributes);
+  let needsUpdate = false;
+  targets.forEach(target => {
+    const desktopValue = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.getResponsiveValue)({
+      responsiveStyles: nextResponsiveStyles
+    }, "desktop", target);
+    if (desktopValue === undefined) {
+      const liveValue = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.getValueAtPath)(attributes, target.path);
+      if (liveValue === undefined) {
+        return;
+      }
+      nextResponsiveStyles = writeResponsiveValue(nextResponsiveStyles, "desktop", target, liveValue);
+      needsUpdate = true;
+      return;
+    }
+    (0,_utils__WEBPACK_IMPORTED_MODULE_4__.setValueAtPath)(nextAttributes, target.path, (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(desktopValue));
+    needsUpdate = true;
+  });
+  if (!needsUpdate) {
+    return null;
+  }
+  nextAttributes.responsiveStyles = nextResponsiveStyles;
+  return nextAttributes;
+};
+const buildDeviceSyncAttributes = (attributes, targets, previousDevice, device) => {
+  let nextResponsiveStyles = cloneResponsiveStyles(attributes);
+  targets.forEach(target => {
+    const liveValue = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.getValueAtPath)(attributes, target.path);
+    nextResponsiveStyles = writeResponsiveValue(nextResponsiveStyles, previousDevice, target, liveValue);
+  });
+  const nextAttributes = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(attributes);
+  targets.forEach(target => {
+    const currentDeviceValue = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.getResponsiveValue)({
+      responsiveStyles: nextResponsiveStyles
+    }, device, target);
+    (0,_utils__WEBPACK_IMPORTED_MODULE_4__.setValueAtPath)(nextAttributes, target.path, currentDeviceValue === undefined ? undefined : (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(currentDeviceValue));
+  });
+  nextAttributes.responsiveStyles = nextResponsiveStyles;
+  return nextAttributes;
+};
+const buildResponsiveAttributeUpdate = (attributes, newAttrs, device, targets) => {
+  let nextResponsiveStyles = cloneResponsiveStyles(attributes);
+  let hasResponsiveChange = false;
+  targets.forEach(target => {
+    if (!hasPathInObject(newAttrs, target.path)) {
+      return;
+    }
+    const incomingValue = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.getValueAtPath)(newAttrs, target.path);
+    const currentValue = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.getValueAtPath)(attributes, target.path);
+    if (incomingValue === undefined && currentValue === undefined) {
+      return;
+    }
+    if (incomingValue === undefined) {
+      hasResponsiveChange = true;
+      nextResponsiveStyles = writeResponsiveValue(nextResponsiveStyles, device, target, incomingValue);
+      return;
+    }
+    if (areValuesEqual(incomingValue, currentValue)) {
+      return;
+    }
+    hasResponsiveChange = true;
+    nextResponsiveStyles = writeResponsiveValue(nextResponsiveStyles, device, target, incomingValue);
+  });
+  if (!hasResponsiveChange) {
+    return null;
+  }
+  return {
+    ...newAttrs,
+    responsiveStyles: nextResponsiveStyles
+  };
+};
+const scheduleSyncReset = syncRef => {
+  requestAnimationFrame(() => {
+    syncRef.current = false;
+  });
 };
 const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.createHigherOrderComponent)(BlockEdit => {
   return props => {
@@ -1231,6 +1301,11 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
     const attrsRef = (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_2__.useRef)(attributes);
     const didMountRef = (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_2__.useRef)(false);
     attrsRef.current = attributes;
+    const applySyncedAttributes = nextAttributes => {
+      isSyncingRef.current = true;
+      setAttributes(nextAttributes);
+      scheduleSyncReset(isSyncingRef);
+    };
 
     /**
      * Run only once onMount
@@ -1240,34 +1315,11 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
         return;
       }
       didMountRef.current = true;
-      const nextAttributes = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(attrsRef.current);
-      let nextResponsiveStyles = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(attrsRef.current?.responsiveStyles || {});
-      let needsUpdate = false;
-      targets.forEach(target => {
-        const desktopValue = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.getResponsiveValue)({
-          responsiveStyles: nextResponsiveStyles
-        }, "desktop", target);
-        if (desktopValue === undefined) {
-          const liveValue = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.getValueAtPath)(attrsRef.current, target.path);
-          if (liveValue !== undefined) {
-            nextResponsiveStyles = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.setResponsiveValue)({
-              responsiveStyles: nextResponsiveStyles
-            }, "desktop", target, liveValue);
-            needsUpdate = true;
-          }
-          return;
-        }
-        setValueAtPath(nextAttributes, target.path, (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(desktopValue));
-        needsUpdate = true;
-      });
-      if (needsUpdate) {
-        nextAttributes.responsiveStyles = nextResponsiveStyles;
-        isSyncingRef.current = true;
-        setAttributes(nextAttributes);
-        requestAnimationFrame(() => {
-          isSyncingRef.current = false;
-        });
+      const nextAttributes = buildMountSyncAttributes(attrsRef.current, targets);
+      if (!nextAttributes) {
+        return;
       }
+      applySyncedAttributes(nextAttributes);
     }, []);
     /**
      * Run after every device preview change
@@ -1278,33 +1330,8 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
       }
       const previousDevice = prevDeviceRef.current;
       prevDeviceRef.current = device;
-      let nextResponsiveStyles = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(attrsRef.current?.responsiveStyles || {});
-      targets.forEach(target => {
-        const liveValue = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.getValueAtPath)(attrsRef.current, target.path);
-        if (liveValue === undefined) {
-          nextResponsiveStyles = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.removeResponsiveValue)({
-            responsiveStyles: nextResponsiveStyles
-          }, previousDevice, target);
-          return;
-        }
-        nextResponsiveStyles = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.setResponsiveValue)({
-          responsiveStyles: nextResponsiveStyles
-        }, previousDevice, target, liveValue);
-      });
-      const nextAttributes = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(attrsRef.current);
-      targets.forEach(target => {
-        const currentDeviceValue = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.getResponsiveValue)({
-          responsiveStyles: nextResponsiveStyles
-        }, device, target);
-        setValueAtPath(nextAttributes, target.path, currentDeviceValue === undefined ? undefined : (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(currentDeviceValue));
-      });
-      nextAttributes.responsiveStyles = nextResponsiveStyles;
-      isSyncingRef.current = true;
-      setAttributes(nextAttributes);
-      requestAnimationFrame(() => {
-        isSyncingRef.current = false;
-        console.log("Screen changed: ", nextAttributes);
-      });
+      const nextAttributes = buildDeviceSyncAttributes(attrsRef.current, targets, previousDevice, device);
+      applySyncedAttributes(nextAttributes);
     }, [device]); // eslint-disable-line react-hooks/exhaustive-deps
 
     /**
@@ -1312,52 +1339,16 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
      */
 
     const interceptedSetAttributes = newAttrs => {
-      console.log("interceptedSetAttributes 1");
       if (isSyncingRef.current) {
         setAttributes(newAttrs);
         return;
       }
-      let nextResponsiveStyles = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(attrsRef.current?.responsiveStyles || {});
-      let hasResponsiveChange = false;
-      targets.forEach(target => {
-        console.log("interceptedSetAttributes 2", target);
-        if (!hasPathInObject(newAttrs, target.path)) {
-          return;
-        }
-        const incomingValue = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.getValueAtPath)(newAttrs, target.path);
-        const currentValue = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.getValueAtPath)(attrsRef.current, target.path);
-        if (incomingValue === undefined && currentValue === undefined) {
-          return;
-        }
-        if (incomingValue === undefined) {
-          hasResponsiveChange = true;
-          nextResponsiveStyles = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.removeResponsiveValue)({
-            responsiveStyles: nextResponsiveStyles
-          }, device, target);
-          return;
-        }
-        if (JSON.stringify(incomingValue) === JSON.stringify(currentValue)) {
-          return;
-        }
-        hasResponsiveChange = true;
-        nextResponsiveStyles = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.setResponsiveValue)({
-          responsiveStyles: nextResponsiveStyles
-        }, device, target, incomingValue);
-      });
-      if (!hasResponsiveChange) {
+      const nextAttributes = buildResponsiveAttributeUpdate(attrsRef.current, newAttrs, device, targets);
+      if (!nextAttributes) {
         setAttributes(newAttrs);
         return;
       }
-      setAttributes({
-        ...newAttrs,
-        responsiveStyles: nextResponsiveStyles
-      });
-      requestAnimationFrame(() => {
-        console.log("Attribute Changed", {
-          ...newAttrs,
-          responsiveStyles: nextResponsiveStyles
-        });
-      });
+      setAttributes(nextAttributes);
     };
     return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)(BlockEdit, {
       ...props,
