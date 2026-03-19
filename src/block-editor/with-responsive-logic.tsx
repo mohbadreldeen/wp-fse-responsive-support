@@ -8,6 +8,7 @@ import type { ResponsiveTarget } from "./types";
 
 import {
 	getResponsiveValue,
+	getResponsiveValueWithFallback,
 	removeResponsiveValue,
 	setResponsiveValue,
 } from "./responsive-targets";
@@ -115,18 +116,35 @@ const buildDeviceSyncAttributes = (
 
 	targets.forEach((target) => {
 		const liveValue = getValueAtPath(attributes, target.path);
+		const explicitPreviousValue = getResponsiveValue(
+			{ responsiveStyles: nextResponsiveStyles },
+			previousDevice,
+			target,
+		);
+		const inheritedPreviousValue = getResponsiveValueWithFallback(
+			{ responsiveStyles: nextResponsiveStyles },
+			previousDevice,
+			target,
+			false,
+		);
+
+		const shouldRemoveInheritedWrite =
+			explicitPreviousValue === undefined &&
+			areValuesEqual(liveValue, inheritedPreviousValue);
+
+		const valueToStore = shouldRemoveInheritedWrite ? undefined : liveValue;
 		nextResponsiveStyles = writeResponsiveValue(
 			nextResponsiveStyles,
 			previousDevice,
 			target,
-			liveValue,
+			valueToStore,
 		);
 	});
 
 	const nextAttributes = clone(attributes);
 
 	targets.forEach((target) => {
-		const currentDeviceValue = getResponsiveValue(
+		const currentDeviceValue = getResponsiveValueWithFallback(
 			{ responsiveStyles: nextResponsiveStyles },
 			device,
 			target,

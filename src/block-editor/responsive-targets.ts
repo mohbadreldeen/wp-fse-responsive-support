@@ -58,6 +58,26 @@ const colorAliasWriteAdapter: ResponsiveWriteAdapter = {
 const responsiveWriteAdapterRegistry = new ResponsiveWriteAdapterRegistry();
 responsiveWriteAdapterRegistry.register(colorAliasWriteAdapter);
 
+const getDeviceFallbackChain = (device: string): string[] => {
+	const normalizedDevice = String(device || "desktop").toLowerCase();
+
+	if (normalizedDevice === "mobile") {
+		return ["mobile", "tablet", "desktop"];
+	}
+
+	if (normalizedDevice === "tablet") {
+		return ["tablet", "desktop"];
+	}
+
+	return ["desktop"];
+};
+
+const PRESET_TO_STYLE_ALIAS: Record<string, string> = {
+	backgroundColor: "style.color.background",
+	textColor: "style.color.text",
+	borderColor: "style.border.color",
+};
+
 export const setResponsiveValue = (
 	attributes: Record<string, any>,
 	device: string,
@@ -134,5 +154,46 @@ export const getResponsiveValue = (
 	if (payload[pathKey] !== undefined) {
 		return payload[pathKey];
 	}
+	return undefined;
+};
+
+export const getResponsiveValueWithFallback = (
+	attributes: Record<string, any>,
+	device: string,
+	target: ResponsiveTarget,
+	includeCurrentDevice = true,
+): any => {
+	const fallbackChain = getDeviceFallbackChain(device);
+	const devicesToCheck = includeCurrentDevice
+		? fallbackChain
+		: fallbackChain.slice(1);
+	const styleAliasPath = PRESET_TO_STYLE_ALIAS[target.path];
+	const styleAliasTarget = styleAliasPath
+		? {
+				...target,
+				path: styleAliasPath,
+		  }
+		: null;
+
+	for (const fallbackDevice of devicesToCheck) {
+		if (styleAliasTarget) {
+			const styleAliasValue = getResponsiveValue(
+				attributes,
+				fallbackDevice,
+				styleAliasTarget,
+			);
+
+			if (styleAliasValue !== undefined) {
+				// Style-value aliases win at this precedence level, and block lower-level preset fallback.
+				return undefined;
+			}
+		}
+
+		const value = getResponsiveValue(attributes, fallbackDevice, target);
+		if (value !== undefined) {
+			return value;
+		}
+	}
+
 	return undefined;
 };

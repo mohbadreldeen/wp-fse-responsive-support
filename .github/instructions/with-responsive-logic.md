@@ -18,9 +18,7 @@ The file now separates the sync flow into small local helpers.
 Low-level path helpers:
 
 - `setValueAtPath( object, path, value )`
-  - Walks a dot-path and writes the value into the cloned attributes object.
-  - Creates missing intermediate objects.
-  - Merges objects when both the existing value and the incoming value are objects.
+  - Imported from `src/utils/index.ts` and used to write incoming device values into cloned attributes.
 - `hasPathInObject( object, path )`
   - Returns `true` only when every segment of the dot-path exists as an own property.
   - This is used to decide whether an intercepted `setAttributes` payload is touching a responsive target.
@@ -78,17 +76,19 @@ If the device actually changed:
 1. Read the current live value for each responsive target.
 2. Persist that live value into the previous device bucket in `responsiveStyles`.
 3. If a live value is `undefined`, remove the previous device entry for that target instead.
-4. Clone the current attributes.
-5. Load the new device value from `responsiveStyles` into the live attributes.
-6. If the new device has no stored value, write `undefined` to the live path.
-7. Store the updated `responsiveStyles` back onto the attributes object.
-8. Call `setAttributes` while `isSyncingRef` is enabled.
+4. If the previous device has no explicit value and the live value only matches an inherited fallback value, remove the previous device entry instead of writing an explicit override.
+5. Clone the current attributes.
+6. Load the new device value with fallback chain lookup (`tablet -> desktop`, `mobile -> tablet -> desktop`) into the live attributes.
+7. If no value exists in the fallback chain, write `undefined` to the live path.
+8. Store the updated `responsiveStyles` back onto the attributes object.
+9. Call `setAttributes` while `isSyncingRef` is enabled.
 
 Current implication:
 
 - switching preview devices treats the currently rendered attributes as the value to save for the device being left
-- the device being entered is then hydrated from `responsiveStyles`
-- missing values on the destination device currently clear the live attribute path by writing `undefined`
+- the device being entered is hydrated with fallback semantics so inherited values remain visible
+- inherited fallback values are not stamped as explicit overrides on the device being left
+- only a fully missing fallback chain clears the live attribute path by writing `undefined`
 
 ## 6. Intercepted Attribute Writes
 

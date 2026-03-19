@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@jest/globals";
 import { encodePathKey } from "../utils";
 import {
+	getResponsiveValueWithFallback,
 	removeResponsiveValue,
 	setResponsiveValue,
 } from "../block-editor/responsive-targets";
@@ -196,5 +197,125 @@ describe("removeResponsiveValue", () => {
 		expect(next.tablet[encodePathKey("style.color.background")]).toBe(
 			"#eb2626",
 		);
+	});
+});
+
+describe("getResponsiveValueWithFallback", () => {
+	it("falls back from tablet to desktop", () => {
+		const target = makeTarget({ path: "style.typography.fontSize" });
+		const attributes = {
+			responsiveStyles: {
+				desktop: {
+					[encodePathKey("style.typography.fontSize")]: "20px",
+				},
+			},
+		};
+
+		expect(getResponsiveValueWithFallback(attributes, "tablet", target)).toBe(
+			"20px",
+		);
+	});
+
+	it("falls back from mobile to tablet then desktop", () => {
+		const target = makeTarget({ path: "style.typography.fontSize" });
+		const withTablet = {
+			responsiveStyles: {
+				tablet: {
+					[encodePathKey("style.typography.fontSize")]: "18px",
+				},
+				desktop: {
+					[encodePathKey("style.typography.fontSize")]: "20px",
+				},
+			},
+		};
+
+		expect(getResponsiveValueWithFallback(withTablet, "mobile", target)).toBe(
+			"18px",
+		);
+
+		const desktopOnly = {
+			responsiveStyles: {
+				desktop: {
+					[encodePathKey("style.typography.fontSize")]: "20px",
+				},
+			},
+		};
+
+		expect(getResponsiveValueWithFallback(desktopOnly, "mobile", target)).toBe(
+			"20px",
+		);
+	});
+
+	it("suppresses preset alias when style alias exists on current device", () => {
+		const presetTarget = makeTarget({
+			path: "backgroundColor",
+			mapper: "backgroundColor",
+		});
+		const styleTarget = makeTarget({
+			path: "style.color.background",
+			mapper: "backgroundColor",
+		});
+		const attributes = {
+			responsiveStyles: {
+				desktop: {
+					[encodePathKey("backgroundColor")]: "brand",
+				},
+				tablet: {
+					[encodePathKey("style.color.background")]: "#ff0000",
+				},
+			},
+		};
+
+		expect(
+			getResponsiveValueWithFallback(attributes, "tablet", presetTarget),
+		).toBeUndefined();
+		expect(
+			getResponsiveValueWithFallback(attributes, "tablet", styleTarget),
+		).toBe("#ff0000");
+	});
+
+	it("suppresses preset alias when style alias exists in fallback chain", () => {
+		const presetTarget = makeTarget({
+			path: "backgroundColor",
+			mapper: "backgroundColor",
+		});
+		const attributes = {
+			responsiveStyles: {
+				desktop: {
+					[encodePathKey("backgroundColor")]: "brand",
+				},
+				tablet: {
+					[encodePathKey("style.color.background")]: "#ff0000",
+				},
+			},
+		};
+
+		expect(
+			getResponsiveValueWithFallback(attributes, "mobile", presetTarget),
+		).toBeUndefined();
+	});
+
+	it("keeps explicit mobile preset alias over tablet style fallback", () => {
+		const presetTarget = makeTarget({
+			path: "backgroundColor",
+			mapper: "backgroundColor",
+		});
+		const attributes = {
+			responsiveStyles: {
+				desktop: {
+					[encodePathKey("backgroundColor")]: "brand",
+				},
+				tablet: {
+					[encodePathKey("style.color.background")]: "#ff0000",
+				},
+				mobile: {
+					[encodePathKey("backgroundColor")]: "brand",
+				},
+			},
+		};
+
+		expect(
+			getResponsiveValueWithFallback(attributes, "mobile", presetTarget),
+		).toBe("brand");
 	});
 });

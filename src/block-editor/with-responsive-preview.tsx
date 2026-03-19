@@ -2,7 +2,7 @@ import { createHigherOrderComponent } from "@wordpress/compose";
 import { useSelect } from "@wordpress/data";
 import { cssPropToJsProp } from "../utils";
 import { useActiveTargets } from "./targets-store";
-import { getResponsiveValue } from "../utils";
+import { getResponsiveValueWithFallback } from "./responsive-targets";
 import { previewAdapterRegistry } from "./preview-adapter-registry";
 import "./preview-adapters/index";
 import type {
@@ -34,7 +34,11 @@ export const withResponsivePreview = createHigherOrderComponent(
 			const resolvedChannels: ResolvedChannels = {};
 
 			targets.forEach((target: ResponsiveTarget) => {
-				const responsiveValue = getResponsiveValue(attributes, device, target);
+				const responsiveValue = getResponsiveValueWithFallback(
+					attributes,
+					device,
+					target,
+				);
 				if (responsiveValue === undefined) {
 					return;
 				}

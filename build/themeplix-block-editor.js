@@ -768,6 +768,7 @@ const ResponsiveTargetsModal = () => {
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   getResponsiveValue: () => (/* binding */ getResponsiveValue),
+/* harmony export */   getResponsiveValueWithFallback: () => (/* binding */ getResponsiveValueWithFallback),
 /* harmony export */   removeResponsiveValue: () => (/* binding */ removeResponsiveValue),
 /* harmony export */   setResponsiveValue: () => (/* binding */ setResponsiveValue)
 /* harmony export */ });
@@ -812,6 +813,21 @@ const colorAliasWriteAdapter = {
 };
 const responsiveWriteAdapterRegistry = new ResponsiveWriteAdapterRegistry();
 responsiveWriteAdapterRegistry.register(colorAliasWriteAdapter);
+const getDeviceFallbackChain = device => {
+  const normalizedDevice = String(device || "desktop").toLowerCase();
+  if (normalizedDevice === "mobile") {
+    return ["mobile", "tablet", "desktop"];
+  }
+  if (normalizedDevice === "tablet") {
+    return ["tablet", "desktop"];
+  }
+  return ["desktop"];
+};
+const PRESET_TO_STYLE_ALIAS = {
+  backgroundColor: "style.color.background",
+  textColor: "style.color.text",
+  borderColor: "style.border.color"
+};
 const setResponsiveValue = (attributes, device, target, value) => {
   const nextResponsiveStyles = (0,_utils__WEBPACK_IMPORTED_MODULE_0__.clone)(attributes?.responsiveStyles || {});
   if (!(0,_utils__WEBPACK_IMPORTED_MODULE_0__.isObject)(nextResponsiveStyles[device])) {
@@ -868,6 +884,29 @@ const getResponsiveValue = (attributes, device, target) => {
   const pathKey = (0,_utils__WEBPACK_IMPORTED_MODULE_0__.encodePathKey)(target.path);
   if (payload[pathKey] !== undefined) {
     return payload[pathKey];
+  }
+  return undefined;
+};
+const getResponsiveValueWithFallback = (attributes, device, target, includeCurrentDevice = true) => {
+  const fallbackChain = getDeviceFallbackChain(device);
+  const devicesToCheck = includeCurrentDevice ? fallbackChain : fallbackChain.slice(1);
+  const styleAliasPath = PRESET_TO_STYLE_ALIAS[target.path];
+  const styleAliasTarget = styleAliasPath ? {
+    ...target,
+    path: styleAliasPath
+  } : null;
+  for (const fallbackDevice of devicesToCheck) {
+    if (styleAliasTarget) {
+      const styleAliasValue = getResponsiveValue(attributes, fallbackDevice, styleAliasTarget);
+      if (styleAliasValue !== undefined) {
+        // Style-value aliases win at this precedence level, and block lower-level preset fallback.
+        return undefined;
+      }
+    }
+    const value = getResponsiveValue(attributes, fallbackDevice, target);
+    if (value !== undefined) {
+      return value;
+    }
   }
   return undefined;
 };
@@ -1234,11 +1273,19 @@ const buildDeviceSyncAttributes = (attributes, targets, previousDevice, device) 
   let nextResponsiveStyles = cloneResponsiveStyles(attributes);
   targets.forEach(target => {
     const liveValue = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.getValueAtPath)(attributes, target.path);
-    nextResponsiveStyles = writeResponsiveValue(nextResponsiveStyles, previousDevice, target, liveValue);
+    const explicitPreviousValue = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.getResponsiveValue)({
+      responsiveStyles: nextResponsiveStyles
+    }, previousDevice, target);
+    const inheritedPreviousValue = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.getResponsiveValueWithFallback)({
+      responsiveStyles: nextResponsiveStyles
+    }, previousDevice, target, false);
+    const shouldRemoveInheritedWrite = explicitPreviousValue === undefined && areValuesEqual(liveValue, inheritedPreviousValue);
+    const valueToStore = shouldRemoveInheritedWrite ? undefined : liveValue;
+    nextResponsiveStyles = writeResponsiveValue(nextResponsiveStyles, previousDevice, target, valueToStore);
   });
   const nextAttributes = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(attributes);
   targets.forEach(target => {
-    const currentDeviceValue = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.getResponsiveValue)({
+    const currentDeviceValue = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.getResponsiveValueWithFallback)({
       responsiveStyles: nextResponsiveStyles
     }, device, target);
     (0,_utils__WEBPACK_IMPORTED_MODULE_4__.setValueAtPath)(nextAttributes, target.path, currentDeviceValue === undefined ? undefined : (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(currentDeviceValue));
@@ -1375,10 +1422,11 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _wordpress_data__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(_wordpress_data__WEBPACK_IMPORTED_MODULE_1__);
 /* harmony import */ var _utils__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ../utils */ "./src/utils/index.ts");
 /* harmony import */ var _targets_store__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./targets-store */ "./src/block-editor/targets-store.ts");
-/* harmony import */ var _preview_adapter_registry__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./preview-adapter-registry */ "./src/block-editor/preview-adapter-registry.ts");
-/* harmony import */ var _preview_adapters_index__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./preview-adapters/index */ "./src/block-editor/preview-adapters/index.ts");
-/* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! react/jsx-runtime */ "react/jsx-runtime");
-/* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6___default = /*#__PURE__*/__webpack_require__.n(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__);
+/* harmony import */ var _responsive_targets__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./responsive-targets */ "./src/block-editor/responsive-targets.ts");
+/* harmony import */ var _preview_adapter_registry__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./preview-adapter-registry */ "./src/block-editor/preview-adapter-registry.ts");
+/* harmony import */ var _preview_adapters_index__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ./preview-adapters/index */ "./src/block-editor/preview-adapters/index.ts");
+/* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! react/jsx-runtime */ "react/jsx-runtime");
+/* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7___default = /*#__PURE__*/__webpack_require__.n(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__);
 
 
 
@@ -1391,14 +1439,14 @@ const withResponsivePreview = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_0__
   return props => {
     const targets = (0,_targets_store__WEBPACK_IMPORTED_MODULE_3__.useActiveTargets)(props.name);
     if (!targets.length) {
-      return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)(BlockListBlock, {
+      return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)(BlockListBlock, {
         ...props
       });
     }
     const deviceType = (0,_wordpress_data__WEBPACK_IMPORTED_MODULE_1__.useSelect)(select => select("core/editor").getDeviceType?.() || "Desktop", []);
     const device = (deviceType || "Desktop").toLowerCase();
     if (device === "desktop") {
-      return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)(BlockListBlock, {
+      return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)(BlockListBlock, {
         ...props
       });
     }
@@ -1408,11 +1456,11 @@ const withResponsivePreview = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_0__
     const previewStyles = {};
     const resolvedChannels = {};
     targets.forEach(target => {
-      const responsiveValue = (0,_utils__WEBPACK_IMPORTED_MODULE_2__.getResponsiveValue)(attributes, device, target);
+      const responsiveValue = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_4__.getResponsiveValueWithFallback)(attributes, device, target);
       if (responsiveValue === undefined) {
         return;
       }
-      const adapter = _preview_adapter_registry__WEBPACK_IMPORTED_MODULE_4__.previewAdapterRegistry.resolve(target);
+      const adapter = _preview_adapter_registry__WEBPACK_IMPORTED_MODULE_5__.previewAdapterRegistry.resolve(target);
       if (!adapter) {
         return;
       }
@@ -1436,11 +1484,11 @@ const withResponsivePreview = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_0__
       }
     });
     if (!Object.keys(previewStyles).length) {
-      return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)(BlockListBlock, {
+      return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)(BlockListBlock, {
         ...props
       });
     }
-    return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_6__.jsx)(BlockListBlock, {
+    return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)(BlockListBlock, {
       ...props,
       wrapperProps: {
         ...(props.wrapperProps || {}),
