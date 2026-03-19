@@ -542,6 +542,22 @@ __webpack_require__.r(__webpack_exports__);
 
 const HeaderToolbarButton = _wordpress_edit_post__WEBPACK_IMPORTED_MODULE_1__?.PluginToolbarButton;
 const runtimeSettings = window?.responsiveOverridesSettings || {};
+const buildSearchTerms = (block, attribute) => {
+  const terms = [block.name, block.title];
+  if (!attribute) {
+    return terms.map(term => term.toLowerCase());
+  }
+  terms.push(attribute.path);
+  if (attribute.mapper) {
+    terms.push(attribute.mapper);
+  }
+  terms.push(`${block.name}/${attribute.path}`);
+  if (attribute.mapper) {
+    terms.push(`${block.name}/${attribute.mapper}`);
+  }
+  return terms.map(term => term.toLowerCase());
+};
+const matchesSearch = (block, term, attribute) => buildSearchTerms(block, attribute).some(candidate => candidate.includes(term));
 const ResponsiveTargetsModal = () => {
   const [isOpen, setIsOpen] = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false);
   const [isSaving, setIsSaving] = (0,react__WEBPACK_IMPORTED_MODULE_0__.useState)(false);
@@ -592,9 +608,6 @@ const ResponsiveTargetsModal = () => {
   }, []) || [];
   const discovered = (0,react__WEBPACK_IMPORTED_MODULE_0__.useMemo)(() => {
     return blockTypes.map(block => {
-      if (block.name === "core/group") {
-        console.log(block.attributes);
-      }
       const attrs = (0,_target_discovery__WEBPACK_IMPORTED_MODULE_6__.listAttributeCandidates)(block.attributes || {});
       return {
         name: block.name,
@@ -617,11 +630,11 @@ const ResponsiveTargetsModal = () => {
       return discovered;
     }
     return discovered.map(block => {
-      const matchesBlock = block.name.toLowerCase().includes(term) || block.title.toLowerCase().includes(term);
+      const matchesBlock = matchesSearch(block, term);
       if (matchesBlock) {
         return block;
       }
-      const attrMatches = block.attributes.filter(attr => attr.path.toLowerCase().includes(term));
+      const attrMatches = block.attributes.filter(attr => matchesSearch(block, term, attr));
       if (!attrMatches.length) {
         return null;
       }

@@ -29,6 +29,40 @@ const HeaderToolbarButton = (editPost as { PluginToolbarButton?: any })
 const runtimeSettings: RuntimeSettings =
 	(window as ExtendedWindow)?.responsiveOverridesSettings || {};
 
+const buildSearchTerms = (
+	block: DiscoverableBlock,
+	attribute?: ResponsiveTarget,
+): string[] => {
+	const terms = [block.name, block.title];
+
+	if (!attribute) {
+		return terms.map((term) => term.toLowerCase());
+	}
+
+	terms.push(attribute.path);
+
+	if (attribute.mapper) {
+		terms.push(attribute.mapper);
+	}
+
+	terms.push(`${block.name}/${attribute.path}`);
+
+	if (attribute.mapper) {
+		terms.push(`${block.name}/${attribute.mapper}`);
+	}
+
+	return terms.map((term) => term.toLowerCase());
+};
+
+const matchesSearch = (
+	block: DiscoverableBlock,
+	term: string,
+	attribute?: ResponsiveTarget,
+): boolean =>
+	buildSearchTerms(block, attribute).some((candidate) =>
+		candidate.includes(term),
+	);
+
 export const ResponsiveTargetsModal = () => {
 	const [isOpen, setIsOpen] = useState(false);
 	const [isSaving, setIsSaving] = useState(false);
@@ -100,9 +134,6 @@ export const ResponsiveTargetsModal = () => {
 	const discovered = useMemo<DiscoverableBlock[]>(() => {
 		return blockTypes
 			.map((block: BlockType) => {
-				if (block.name === "core/group") {
-					console.log(block.attributes);
-				}
 				const attrs = listAttributeCandidates(
 					block.attributes || {},
 				) as ResponsiveTarget[];
@@ -134,15 +165,13 @@ export const ResponsiveTargetsModal = () => {
 
 		return discovered
 			.map((block: DiscoverableBlock) => {
-				const matchesBlock =
-					block.name.toLowerCase().includes(term) ||
-					block.title.toLowerCase().includes(term);
+				const matchesBlock = matchesSearch(block, term);
 				if (matchesBlock) {
 					return block;
 				}
 
 				const attrMatches = block.attributes.filter((attr: ResponsiveTarget) =>
-					attr.path.toLowerCase().includes(term),
+					matchesSearch(block, term, attr),
 				);
 				if (!attrMatches.length) {
 					return null;
