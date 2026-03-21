@@ -14,7 +14,7 @@ const makeTarget = (
 	path: "style.color.background",
 	valueKind: "scalar",
 	leafKeys: [],
-	mapper: "backgroundColor",
+	cssProperty: "background-color",
 	sourceKind: "style-value",
 	channel: "background",
 	...overrides,
@@ -25,7 +25,7 @@ describe("expandTrackedTargets", () => {
 		const targets = expandTrackedTargets([
 			makeTarget({
 				path: "style.border.color",
-				mapper: "borderColor",
+				cssProperty: "border-color",
 				sourceKind: "style-value",
 				channel: "border",
 			}),
@@ -41,13 +41,13 @@ describe("expandTrackedTargets", () => {
 		const targets = expandTrackedTargets([
 			makeTarget({
 				path: "style.color.background",
-				mapper: "backgroundColor",
+				cssProperty: "background-color",
 				sourceKind: "style-value",
 				channel: "background",
 			}),
 			makeTarget({
 				path: "backgroundColor",
-				mapper: "backgroundColor",
+				cssProperty: "background-color",
 				sourceKind: "preset-slug",
 				channel: "background",
 			}),
@@ -64,7 +64,7 @@ describe("expandTrackedTargets", () => {
 			getSiblingAliasPath(
 				makeTarget({
 					path: "style.border.color",
-					mapper: "borderColor",
+					cssProperty: "border-color",
 					sourceKind: "style-value",
 					channel: "border",
 				}),
@@ -75,7 +75,7 @@ describe("expandTrackedTargets", () => {
 			getSiblingAliasPath(
 				makeTarget({
 					path: "borderColor",
-					mapper: "borderColor",
+					cssProperty: "border-color",
 					sourceKind: "preset-slug",
 					channel: "border",
 				}),
@@ -89,7 +89,7 @@ describe("buildResponsiveAttributeUpdate", () => {
 		const targets = expandTrackedTargets([
 			makeTarget({
 				path: "style.border.color",
-				mapper: "borderColor",
+				cssProperty: "border-color",
 				sourceKind: "style-value",
 				channel: "border",
 			}),
@@ -130,7 +130,7 @@ describe("buildDeviceSyncAttributes", () => {
 		const targets = expandTrackedTargets([
 			makeTarget({
 				path: "style.border.color",
-				mapper: "borderColor",
+				cssProperty: "border-color",
 				sourceKind: "style-value",
 				channel: "border",
 			}),
@@ -175,7 +175,7 @@ describe("buildDeviceSyncAttributes", () => {
 		const targets = expandTrackedTargets([
 			makeTarget({
 				path: "style.border.color",
-				mapper: "borderColor",
+				cssProperty: "border-color",
 				sourceKind: "style-value",
 				channel: "border",
 			}),

@@ -1,4 +1,11 @@
 export type ValueKind = "scalar" | "object";
+export type StyleStrategy =
+	| "padding"
+	| "margin"
+	| "border-radius"
+	| "border-width"
+	| "border-color"
+	| "border-style";
 
 export type ResponsiveSourceKind = "style-value" | "preset-slug" | "generic";
 export type ResponsiveColorChannel = "text" | "background" | "border";
@@ -8,7 +15,8 @@ export type ResponsiveTarget = {
 	path: string;
 	valueKind: ValueKind;
 	leafKeys: string[];
-	mapper: string;
+	cssProperty?: string;
+	styleStrategy?: StyleStrategy;
 	sourceKind?: ResponsiveSourceKind;
 	channel?: ResponsiveColorChannel;
 };

@@ -41,14 +41,22 @@ const buildSearchTerms = (
 
 	terms.push(attribute.path);
 
-	if (attribute.mapper) {
-		terms.push(attribute.mapper);
+	if (attribute.cssProperty) {
+		terms.push(attribute.cssProperty);
+	}
+
+	if (attribute.styleStrategy) {
+		terms.push(attribute.styleStrategy);
 	}
 
 	terms.push(`${block.name}/${attribute.path}`);
 
-	if (attribute.mapper) {
-		terms.push(`${block.name}/${attribute.mapper}`);
+	if (attribute.cssProperty) {
+		terms.push(`${block.name}/${attribute.cssProperty}`);
+	}
+
+	if (attribute.styleStrategy) {
+		terms.push(`${block.name}/${attribute.styleStrategy}`);
 	}
 
 	return terms.map((term) => term.toLowerCase());
@@ -200,7 +208,10 @@ export const ResponsiveTargetsModal = () => {
 					path: attr.path,
 					valueKind: attr.valueKind,
 					leafKeys: attr.leafKeys || [],
-					mapper: attr.mapper || "",
+					cssProperty: attr.cssProperty || "",
+					styleStrategy: attr.styleStrategy,
+					sourceKind: attr.sourceKind,
+					channel: attr.channel,
 				},
 			};
 		});

@@ -1,4 +1,9 @@
-import { clone, normalizePath, getMapperForPath, isObject } from "../utils";
+import {
+	clone,
+	normalizePath,
+	getCssPropertyForPath,
+	isObject,
+} from "../utils";
 import { getColorTargetMeta } from "./color-utils";
 import { ResponsiveTarget } from "./types";
 
@@ -9,7 +14,7 @@ const DEFAULT_STYLE_TARGETS = [
 		path: "style.spacing.padding",
 		valueKind: "object",
 		leafKeys: ["top", "right", "bottom", "left"],
-		mapper: "spacingPadding",
+		styleStrategy: "padding",
 		sourceKind: "generic",
 		channel: undefined,
 	},
@@ -17,7 +22,7 @@ const DEFAULT_STYLE_TARGETS = [
 		path: "style.spacing.margin",
 		valueKind: "object",
 		leafKeys: ["top", "right", "bottom", "left"],
-		mapper: "spacingMargin",
+		styleStrategy: "margin",
 		sourceKind: "generic",
 		channel: undefined,
 	},
@@ -25,7 +30,7 @@ const DEFAULT_STYLE_TARGETS = [
 		path: "style.color.text",
 		valueKind: "scalar",
 		leafKeys: [],
-		mapper: "textColor",
+		cssProperty: "color",
 		sourceKind: "style-value",
 		channel: "text",
 	},
@@ -33,7 +38,7 @@ const DEFAULT_STYLE_TARGETS = [
 		path: "style.color.background",
 		valueKind: "scalar",
 		leafKeys: [],
-		mapper: "backgroundColor",
+		cssProperty: "background-color",
 		sourceKind: "style-value",
 		channel: "background",
 	},
@@ -41,27 +46,57 @@ const DEFAULT_STYLE_TARGETS = [
 		path: "style.border.radius",
 		valueKind: "object",
 		leafKeys: ["topLeft", "topRight", "bottomRight", "bottomLeft"],
-		mapper: "borderRadius",
+		styleStrategy: "border-radius",
 		sourceKind: "generic",
 		channel: undefined,
 	},
 	{
 		path: "style.border.width",
-		valueKind: "scalar",
-		leafKeys: [],
-		mapper: "borderWidth",
+		valueKind: "object",
+		leafKeys: ["top", "right", "bottom", "left"],
+		styleStrategy: "border-width",
 		sourceKind: "generic",
 		channel: undefined,
 	},
 	{
 		path: "style.border.color",
-		valueKind: "scalar",
-		leafKeys: [],
-		mapper: "borderColor",
+		valueKind: "object",
+		leafKeys: ["top", "right", "bottom", "left"],
+		styleStrategy: "border-color",
 		sourceKind: "style-value",
 		channel: "border",
 	},
 ];
+
+const getStyleStrategyForPath = (
+	path: string,
+): ResponsiveTarget["styleStrategy"] => {
+	if (path === "style.spacing.padding") {
+		return "padding";
+	}
+
+	if (path === "style.spacing.margin") {
+		return "margin";
+	}
+
+	if (path === "style.border.radius") {
+		return "border-radius";
+	}
+
+	if (path === "style.border.width") {
+		return "border-width";
+	}
+
+	if (path === "style.border.color") {
+		return "border-color";
+	}
+
+	if (path === "style.border.style") {
+		return "border-style";
+	}
+
+	return undefined;
+};
 
 export const normalizeTargets = (rawTargets: any) => {
 	if (!Array.isArray(rawTargets) || !rawTargets.length) {
@@ -100,6 +135,12 @@ export const normalizeTargets = (rawTargets: any) => {
 		.map((target) => {
 			const normalizedPath = normalizePath(target.path);
 			const colorMeta = getColorTargetMeta(normalizedPath);
+			const cssProperty =
+				typeof target.cssProperty === "string" ? target.cssProperty.trim() : "";
+			const styleStrategy =
+				typeof target.styleStrategy === "string"
+					? (target.styleStrategy as ResponsiveTarget["styleStrategy"])
+					: getStyleStrategyForPath(normalizedPath);
 
 			const normalized = {
 				block: String(target.block),
@@ -108,19 +149,25 @@ export const normalizeTargets = (rawTargets: any) => {
 				leafKeys: Array.isArray(target.leafKeys)
 					? target.leafKeys.map(String)
 					: [],
-				mapper: target.mapper ? String(target.mapper) : "",
+				cssProperty,
+				styleStrategy,
 				sourceKind: target.sourceKind
 					? String(target.sourceKind)
 					: colorMeta.sourceKind,
 				channel: target.channel ? String(target.channel) : colorMeta.channel,
 			};
 
-			if (!normalized.mapper) {
-				normalized.mapper = getMapperForPath(normalized.path);
+			if (normalized.valueKind === "scalar" && !normalized.cssProperty) {
+				return null;
+			}
+
+			if (normalized.valueKind === "object" && !normalized.styleStrategy) {
+				return null;
 			}
 
 			return normalized;
-		});
+		})
+		.filter(Boolean) as ResponsiveTarget[];
 };
 
 const detectValueKind = (value: any) => {
@@ -177,7 +224,6 @@ export const listAttributeCandidates = (
 		if (type === "object" && isObject(schema?.properties)) {
 			if (!forbiddenPaths.has(path)) {
 				const colorMeta = getColorTargetMeta(path);
-				const mapper = getMapperForPath(path);
 				const leafKeys = Object.entries(schema.properties)
 					.filter(([, childSchema]: [string, any]) => {
 						const childType = childSchema?.type;
@@ -188,16 +234,17 @@ export const listAttributeCandidates = (
 						);
 					})
 					.map(([key]) => key);
+				const styleStrategy = getStyleStrategyForPath(path);
 
 				// Only expose object paths that are directly actionable.
 				// This avoids surfacing container/typo paths like `style.brder`
 				// that have nested children but no usable direct value contract.
-				if (leafKeys.length || mapper || colorMeta.channel) {
+				if ((leafKeys.length || colorMeta.channel) && styleStrategy) {
 					candidates.push({
 						path,
 						valueKind: "object",
 						leafKeys,
-						mapper,
+						styleStrategy,
 						sourceKind: colorMeta.sourceKind,
 						channel: colorMeta.channel,
 					});
@@ -217,9 +264,14 @@ export const listAttributeCandidates = (
 			return;
 		}
 
-		// Skip generic object-type attributes without explicit mappers
+		// Skip generic object-type attributes without explicit CSS mapping
 		// to prevent selecting overly broad paths like "style"
 		if (valueKind === "object" || forbiddenPaths.has(path)) {
+			return;
+		}
+
+		const cssProperty = getCssPropertyForPath(path);
+		if (!cssProperty) {
 			return;
 		}
 
@@ -227,7 +279,7 @@ export const listAttributeCandidates = (
 			path,
 			valueKind,
 			leafKeys: [],
-			mapper: "",
+			cssProperty,
 			...getColorTargetMeta(path),
 		});
 	});

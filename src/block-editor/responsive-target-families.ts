@@ -1,5 +1,6 @@
 import { getColorTargetMeta } from "./color-utils";
 import type { ResponsiveTarget } from "./types";
+import { getCssPropertyForPath } from "../utils";
 
 const COLOR_CHANNEL_STYLE_PATHS: Record<string, string> = {
 	text: "style.color.text",
@@ -7,17 +8,24 @@ const COLOR_CHANNEL_STYLE_PATHS: Record<string, string> = {
 	border: "style.border.color",
 };
 
+const COLOR_CHANNEL_PRESET_PATHS: Record<string, string> = {
+	text: "textColor",
+	background: "backgroundColor",
+	border: "borderColor",
+};
+
 const getColorFamilyPaths = (target: ResponsiveTarget): string[] => {
-	if (!target.channel || !target.mapper) {
+	if (!target.channel) {
 		return [target.path];
 	}
 
 	const stylePath = COLOR_CHANNEL_STYLE_PATHS[target.channel];
-	if (!stylePath) {
+	const presetPath = COLOR_CHANNEL_PRESET_PATHS[target.channel];
+	if (!stylePath || !presetPath) {
 		return [target.path];
 	}
 
-	return Array.from(new Set<string>([stylePath, target.mapper]));
+	return Array.from(new Set<string>([stylePath, presetPath]));
 };
 
 export const getSiblingAliasPath = (
@@ -47,7 +55,7 @@ export const expandTrackedTargets = (
 	targets.forEach((target) => {
 		trackedTargets.set(target.path, target);
 
-		if (!target.channel || !target.mapper) {
+		if (!target.channel) {
 			return;
 		}
 
@@ -60,7 +68,8 @@ export const expandTrackedTargets = (
 			trackedTargets.set(path, {
 				...target,
 				path,
-				mapper: target.mapper,
+				cssProperty: getCssPropertyForPath(path),
+				styleStrategy: undefined,
 				sourceKind: colorMeta.sourceKind,
 				channel: colorMeta.channel,
 			});

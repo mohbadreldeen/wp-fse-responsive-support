@@ -99,9 +99,42 @@ function ro_sanitize_targets_config( $payload ) {
 			}
 		}
 
-		$mapper = isset( $target['mapper'] ) ? sanitize_text_field( (string) $target['mapper'] ) : '';
-		if ( '' !== $mapper && ! in_array( $mapper, array( 'spacingPadding', 'spacingMargin', 'textColor', 'backgroundColor', 'borderColor' ), true ) ) {
-			$mapper = '';
+		$css_property = isset( $target['cssProperty'] )
+			? trim( sanitize_text_field( (string) $target['cssProperty'] ) )
+			: '';
+		if ( '' !== $css_property && ! preg_match( '/^[a-z][a-z0-9-]*$/', $css_property ) ) {
+			$css_property = '';
+		}
+
+		$style_strategy = isset( $target['styleStrategy'] )
+			? trim( sanitize_text_field( (string) $target['styleStrategy'] ) )
+			: '';
+		if ( '' !== $style_strategy && ! in_array( $style_strategy, array( 'padding', 'margin', 'border-radius', 'border-width', 'border-color', 'border-style' ), true ) ) {
+			$style_strategy = '';
+		}
+
+		if ( '' === $style_strategy && 'object' === $value_kind ) {
+			if ( 'style.spacing.padding' === $path ) {
+				$style_strategy = 'padding';
+			} elseif ( 'style.spacing.margin' === $path ) {
+				$style_strategy = 'margin';
+			} elseif ( 'style.border.radius' === $path ) {
+				$style_strategy = 'border-radius';
+			} elseif ( 'style.border.width' === $path ) {
+				$style_strategy = 'border-width';
+			} elseif ( 'style.border.color' === $path ) {
+				$style_strategy = 'border-color';
+			} elseif ( 'style.border.style' === $path ) {
+				$style_strategy = 'border-style';
+			}
+		}
+
+		if ( 'scalar' === $value_kind && '' === $css_property ) {
+			continue;
+		}
+
+		if ( 'object' === $value_kind && '' === $style_strategy ) {
+			continue;
 		}
 
 		$targets[] = array(
@@ -109,7 +142,8 @@ function ro_sanitize_targets_config( $payload ) {
 			'path'      => $path,
 			'valueKind' => $value_kind,
 			'leafKeys'  => array_values( array_unique( $leaf_keys ) ),
-			'mapper'    => $mapper,
+			'cssProperty' => $css_property,
+			'styleStrategy' => $style_strategy,
 		);
 	}
 
@@ -652,6 +686,103 @@ function ro_get_generic_target_declarations( $path, $value, $target ) {
 }
 
 /**
+ * Build declarations for object targets using an internal strategy.
+ *
+ * @param string $strategy Strategy key.
+ * @param mixed  $value Object value from responsiveStyles.
+ * @return array<string, string>
+ */
+function ro_get_object_strategy_declarations( $strategy, $value ) {
+	if ( ! is_array( $value ) ) {
+		if ( 'border-color' === $strategy ) {
+			return ro_get_text_color_declaration( $value, 'border-color' );
+		}
+
+		if ( 'border-width' === $strategy || 'border-style' === $strategy ) {
+			$property = 'border-width';
+			if ( 'border-style' === $strategy ) {
+				$property = 'border-style';
+			}
+
+			$sanitized = ro_sanitize_generic_css_value( $value );
+			if ( '' === $sanitized ) {
+				return array();
+			}
+
+			return array( $property => $sanitized );
+		}
+
+		return array();
+	}
+
+	$maps = array(
+		'padding' => array(
+			'top'    => 'padding-top',
+			'right'  => 'padding-right',
+			'bottom' => 'padding-bottom',
+			'left'   => 'padding-left',
+		),
+		'margin' => array(
+			'top'    => 'margin-top',
+			'right'  => 'margin-right',
+			'bottom' => 'margin-bottom',
+			'left'   => 'margin-left',
+		),
+		'border-radius' => array(
+			'topLeft'     => 'border-top-left-radius',
+			'topRight'    => 'border-top-right-radius',
+			'bottomRight' => 'border-bottom-right-radius',
+			'bottomLeft'  => 'border-bottom-left-radius',
+		),
+		'border-width' => array(
+			'top'    => 'border-top-width',
+			'right'  => 'border-right-width',
+			'bottom' => 'border-bottom-width',
+			'left'   => 'border-left-width',
+		),
+		'border-color' => array(
+			'top'    => 'border-top-color',
+			'right'  => 'border-right-color',
+			'bottom' => 'border-bottom-color',
+			'left'   => 'border-left-color',
+		),
+		'border-style' => array(
+			'top'    => 'border-top-style',
+			'right'  => 'border-right-style',
+			'bottom' => 'border-bottom-style',
+			'left'   => 'border-left-style',
+		),
+	);
+
+	if ( ! isset( $maps[ $strategy ] ) ) {
+		return array();
+	}
+
+	$declarations = array();
+	foreach ( $maps[ $strategy ] as $leaf_key => $property_name ) {
+		if ( ! array_key_exists( $leaf_key, $value ) ) {
+			continue;
+		}
+
+		$raw_leaf_value = $value[ $leaf_key ];
+		if ( in_array( $property_name, array( 'color', 'background-color', 'border-color', 'border-top-color', 'border-right-color', 'border-bottom-color', 'border-left-color' ), true ) ) {
+			$color_declaration = ro_get_text_color_declaration( $raw_leaf_value, $property_name );
+			if ( ! empty( $color_declaration[ $property_name ] ) ) {
+				$declarations[ $property_name ] = $color_declaration[ $property_name ];
+			}
+			continue;
+		}
+
+		$sanitized = ro_sanitize_generic_css_value( $raw_leaf_value );
+		if ( '' !== $sanitized ) {
+			$declarations[ $property_name ] = $sanitized;
+		}
+	}
+
+	return $declarations;
+}
+
+/**
  * Build a declaration list for a configured responsive target.
  *
  * @param array $attrs  Block attributes.
@@ -660,63 +791,78 @@ function ro_get_generic_target_declarations( $path, $value, $target ) {
  * @return array<string, string>
  */
 function ro_get_target_declarations( $attrs, $target, $device_data ) {
-	$path   = isset( $target['path'] ) ? (string) $target['path'] : '';
-	$mapper = isset( $target['mapper'] ) ? (string) $target['mapper'] : '';
+	$path         = isset( $target['path'] ) ? (string) $target['path'] : '';
+	$value_kind   = isset( $target['valueKind'] ) ? (string) $target['valueKind'] : 'scalar';
+	$css_property = isset( $target['cssProperty'] ) ? trim( (string) $target['cssProperty'] ) : '';
+	$style_strategy = isset( $target['styleStrategy'] ) ? trim( (string) $target['styleStrategy'] ) : '';
 
-	if ( '' === $mapper && 'style.spacing.padding' === $path ) {
-		$mapper = 'spacingPadding';
-	}
-	if ( '' === $mapper && 'style.spacing.margin' === $path ) {
-		$mapper = 'spacingMargin';
-	}
-	if ( '' === $mapper && 'style.color.text' === $path ) {
-		$mapper = 'textColor';
-	}
-	if ( '' === $mapper && 'style.color.background' === $path ) {
-		$mapper = 'backgroundColor';
-	}
-	if ( '' === $mapper && 'style.border.color' === $path ) {
-		$mapper = 'borderColor';
-	}
-	if ( '' === $mapper && 'textColor' === $path ) {
-		$mapper = 'textColor';
-	}
-	if ( '' === $mapper && 'backgroundColor' === $path ) {
-		$mapper = 'backgroundColor';
-	}
-	if ( '' === $mapper && 'borderColor' === $path ) {
-		$mapper = 'borderColor';
+	if ( '' === $style_strategy && 'object' === $value_kind ) {
+		if ( 'style.spacing.padding' === $path ) {
+			$style_strategy = 'padding';
+		} elseif ( 'style.spacing.margin' === $path ) {
+			$style_strategy = 'margin';
+		} elseif ( 'style.border.radius' === $path ) {
+			$style_strategy = 'border-radius';
+		} elseif ( 'style.border.width' === $path ) {
+			$style_strategy = 'border-width';
+		} elseif ( 'style.border.color' === $path ) {
+			$style_strategy = 'border-color';
+		} elseif ( 'style.border.style' === $path ) {
+			$style_strategy = 'border-style';
+		}
 	}
 
 	$path_key = ro_encode_path_key( $path );
 	$value    = $device_data[ $path_key ] ?? null;
 
-	if ( 'textColor' === $mapper || 'backgroundColor' === $mapper || 'borderColor' === $mapper ) {
-		$css_property = 'color';
-		if ( 'backgroundColor' === $mapper ) {
-			$css_property = 'background-color';
+	// Color aliases can be stored in either style path or preset slug path,
+	// depending on what the user edited in the block controls.
+	if ( null === $value ) {
+		$alias_path = '';
+		if ( 'style.color.text' === $path ) {
+			$alias_path = 'textColor';
+		} elseif ( 'style.color.background' === $path ) {
+			$alias_path = 'backgroundColor';
+		} elseif ( 'style.border.color' === $path ) {
+			$alias_path = 'borderColor';
+		} elseif ( 'textColor' === $path ) {
+			$alias_path = 'style.color.text';
+		} elseif ( 'backgroundColor' === $path ) {
+			$alias_path = 'style.color.background';
+		} elseif ( 'borderColor' === $path ) {
+			$alias_path = 'style.border.color';
 		}
-		if ( 'borderColor' === $mapper ) {
-			$css_property = 'border-color';
+
+		if ( '' !== $alias_path ) {
+			$alias_key = ro_encode_path_key( $alias_path );
+			if ( array_key_exists( $alias_key, $device_data ) ) {
+				$value = $device_data[ $alias_key ];
+			}
 		}
+	}
+
+	if ( 'object' === $value_kind ) {
+		if ( ! is_array( $value ) || '' === $style_strategy ) {
+			return array();
+		}
+
+		return ro_get_object_strategy_declarations( $style_strategy, $value );
+	}
+
+	if ( '' === $css_property ) {
+		return array();
+	}
+
+	if ( in_array( $css_property, array( 'color', 'background-color', 'border-color' ), true ) ) {
 		return ro_get_text_color_declaration( $value, $css_property );
 	}
 
-	if ( 'spacingPadding' === $mapper ) {
-		if ( ! is_array( $value ) ) {
-			return array();
-		}
-		return ro_get_device_spacing_declarations( array( 'padding' => $value ) );
+	$sanitized = ro_sanitize_generic_css_value( $value );
+	if ( '' === $sanitized ) {
+		return array();
 	}
 
-	if ( 'spacingMargin' === $mapper ) {
-		if ( ! is_array( $value ) ) {
-			return array();
-		}
-		return ro_get_device_spacing_declarations( array( 'margin' => $value ) );
-	}
-
-	return ro_get_generic_target_declarations( $path, $value, $target );
+	return array( $css_property => $sanitized );
 }
 
 /**
@@ -805,6 +951,12 @@ function ro_render_responsive_group_spacing( $block_content, $block ) {
 			if ( is_string( $class_attr ) && preg_match( '/has-[\w-]+-color(?!-)/', $class_attr, $matches ) ) {
 				$processor->remove_class( $matches[0] );
 			}
+		} elseif ( false !== strpos( $css_property, 'border' ) && false !== strpos( $css_property, 'color' ) ) {
+			$processor->remove_class( 'has-border-color' );
+			$class_attr = $processor->get_attribute( 'class' );
+			if ( is_string( $class_attr ) && preg_match( '/has-[\w-]+-border-color/', $class_attr, $matches ) ) {
+				$processor->remove_class( $matches[0] );
+			}
 		}
 	}
 
@@ -817,6 +969,13 @@ function ro_render_responsive_group_spacing( $block_content, $block ) {
 		foreach ( $override_properties as $css_property ) {
 			// Convert CSS property to regex-safe format
 			$properties_to_strip[] = preg_quote( $css_property, '/' );
+
+			// If overriding border color variants, also strip shorthand properties
+			// that can keep inline colors winning over stylesheet rules.
+			if ( false !== strpos( $css_property, 'border' ) && false !== strpos( $css_property, 'color' ) ) {
+				$properties_to_strip[] = 'border-color';
+				$properties_to_strip[] = 'border';
+			}
 		}
 		
 		if ( ! empty( $properties_to_strip ) ) {

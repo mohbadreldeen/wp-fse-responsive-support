@@ -115,21 +115,29 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   getSiblingAliasPath: () => (/* binding */ getSiblingAliasPath)
 /* harmony export */ });
 /* harmony import */ var _color_utils__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./color-utils */ "./src/block-editor/color-utils.ts");
+/* harmony import */ var _utils__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ../utils */ "./src/utils/index.ts");
+
 
 const COLOR_CHANNEL_STYLE_PATHS = {
   text: "style.color.text",
   background: "style.color.background",
   border: "style.border.color"
 };
+const COLOR_CHANNEL_PRESET_PATHS = {
+  text: "textColor",
+  background: "backgroundColor",
+  border: "borderColor"
+};
 const getColorFamilyPaths = target => {
-  if (!target.channel || !target.mapper) {
+  if (!target.channel) {
     return [target.path];
   }
   const stylePath = COLOR_CHANNEL_STYLE_PATHS[target.channel];
-  if (!stylePath) {
+  const presetPath = COLOR_CHANNEL_PRESET_PATHS[target.channel];
+  if (!stylePath || !presetPath) {
     return [target.path];
   }
-  return Array.from(new Set([stylePath, target.mapper]));
+  return Array.from(new Set([stylePath, presetPath]));
 };
 const getSiblingAliasPath = target => {
   const familyPaths = getColorFamilyPaths(target);
@@ -148,7 +156,7 @@ const expandTrackedTargets = targets => {
   const trackedTargets = new Map();
   targets.forEach(target => {
     trackedTargets.set(target.path, target);
-    if (!target.channel || !target.mapper) {
+    if (!target.channel) {
       return;
     }
     getColorFamilyPaths(target).forEach(path => {
@@ -159,7 +167,8 @@ const expandTrackedTargets = targets => {
       trackedTargets.set(path, {
         ...target,
         path,
-        mapper: target.mapper,
+        cssProperty: (0,_utils__WEBPACK_IMPORTED_MODULE_1__.getCssPropertyForPath)(path),
+        styleStrategy: undefined,
         sourceKind: colorMeta.sourceKind,
         channel: colorMeta.channel
       });
@@ -213,12 +222,18 @@ const buildSearchTerms = (block, attribute) => {
     return terms.map(term => term.toLowerCase());
   }
   terms.push(attribute.path);
-  if (attribute.mapper) {
-    terms.push(attribute.mapper);
+  if (attribute.cssProperty) {
+    terms.push(attribute.cssProperty);
+  }
+  if (attribute.styleStrategy) {
+    terms.push(attribute.styleStrategy);
   }
   terms.push(`${block.name}/${attribute.path}`);
-  if (attribute.mapper) {
-    terms.push(`${block.name}/${attribute.mapper}`);
+  if (attribute.cssProperty) {
+    terms.push(`${block.name}/${attribute.cssProperty}`);
+  }
+  if (attribute.styleStrategy) {
+    terms.push(`${block.name}/${attribute.styleStrategy}`);
   }
   return terms.map(term => term.toLowerCase());
 };
@@ -327,7 +342,10 @@ const ResponsiveTargetsModal = () => {
           path: attr.path,
           valueKind: attr.valueKind,
           leafKeys: attr.leafKeys || [],
-          mapper: attr.mapper || ""
+          cssProperty: attr.cssProperty || "",
+          styleStrategy: attr.styleStrategy,
+          sourceKind: attr.sourceKind,
+          channel: attr.channel
         }
       };
     });
@@ -615,52 +633,73 @@ const DEFAULT_STYLE_TARGETS = [{
   path: "style.spacing.padding",
   valueKind: "object",
   leafKeys: ["top", "right", "bottom", "left"],
-  mapper: "spacingPadding",
+  styleStrategy: "padding",
   sourceKind: "generic",
   channel: undefined
 }, {
   path: "style.spacing.margin",
   valueKind: "object",
   leafKeys: ["top", "right", "bottom", "left"],
-  mapper: "spacingMargin",
+  styleStrategy: "margin",
   sourceKind: "generic",
   channel: undefined
 }, {
   path: "style.color.text",
   valueKind: "scalar",
   leafKeys: [],
-  mapper: "textColor",
+  cssProperty: "color",
   sourceKind: "style-value",
   channel: "text"
 }, {
   path: "style.color.background",
   valueKind: "scalar",
   leafKeys: [],
-  mapper: "backgroundColor",
+  cssProperty: "background-color",
   sourceKind: "style-value",
   channel: "background"
 }, {
   path: "style.border.radius",
   valueKind: "object",
   leafKeys: ["topLeft", "topRight", "bottomRight", "bottomLeft"],
-  mapper: "borderRadius",
+  styleStrategy: "border-radius",
   sourceKind: "generic",
   channel: undefined
 }, {
   path: "style.border.width",
-  valueKind: "scalar",
-  leafKeys: [],
-  mapper: "borderWidth",
+  valueKind: "object",
+  leafKeys: ["top", "right", "bottom", "left"],
+  styleStrategy: "border-width",
   sourceKind: "generic",
   channel: undefined
 }, {
   path: "style.border.color",
-  valueKind: "scalar",
-  leafKeys: [],
-  mapper: "borderColor",
+  valueKind: "object",
+  leafKeys: ["top", "right", "bottom", "left"],
+  styleStrategy: "border-color",
   sourceKind: "style-value",
   channel: "border"
 }];
+const getStyleStrategyForPath = path => {
+  if (path === "style.spacing.padding") {
+    return "padding";
+  }
+  if (path === "style.spacing.margin") {
+    return "margin";
+  }
+  if (path === "style.border.radius") {
+    return "border-radius";
+  }
+  if (path === "style.border.width") {
+    return "border-width";
+  }
+  if (path === "style.border.color") {
+    return "border-color";
+  }
+  if (path === "style.border.style") {
+    return "border-style";
+  }
+  return undefined;
+};
 const normalizeTargets = rawTargets => {
   if (!Array.isArray(rawTargets) || !rawTargets.length) {
     return (0,_utils__WEBPACK_IMPORTED_MODULE_0__.clone)(DEFAULT_TARGETS);
@@ -688,20 +727,26 @@ const normalizeTargets = rawTargets => {
   }).map(target => {
     const normalizedPath = (0,_utils__WEBPACK_IMPORTED_MODULE_0__.normalizePath)(target.path);
     const colorMeta = (0,_color_utils__WEBPACK_IMPORTED_MODULE_1__.getColorTargetMeta)(normalizedPath);
+    const cssProperty = typeof target.cssProperty === "string" ? target.cssProperty.trim() : "";
+    const styleStrategy = typeof target.styleStrategy === "string" ? target.styleStrategy : getStyleStrategyForPath(normalizedPath);
     const normalized = {
       block: String(target.block),
       path: normalizedPath,
       valueKind: target.valueKind === "scalar" ? "scalar" : "object",
       leafKeys: Array.isArray(target.leafKeys) ? target.leafKeys.map(String) : [],
-      mapper: target.mapper ? String(target.mapper) : "",
+      cssProperty,
+      styleStrategy,
       sourceKind: target.sourceKind ? String(target.sourceKind) : colorMeta.sourceKind,
       channel: target.channel ? String(target.channel) : colorMeta.channel
     };
-    if (!normalized.mapper) {
-      normalized.mapper = (0,_utils__WEBPACK_IMPORTED_MODULE_0__.getMapperForPath)(normalized.path);
+    if (normalized.valueKind === "scalar" && !normalized.cssProperty) {
+      return null;
+    }
+    if (normalized.valueKind === "object" && !normalized.styleStrategy) {
+      return null;
     }
     return normalized;
-  });
+  }).filter(Boolean);
 };
 const detectValueKind = value => {
   if ((0,_utils__WEBPACK_IMPORTED_MODULE_0__.isObject)(value)) {
@@ -738,21 +783,21 @@ const listAttributeCandidates = (attributes, pathPrefix = "", depth = 0) => {
     if (type === "object" && (0,_utils__WEBPACK_IMPORTED_MODULE_0__.isObject)(schema?.properties)) {
       if (!forbiddenPaths.has(path)) {
         const colorMeta = (0,_color_utils__WEBPACK_IMPORTED_MODULE_1__.getColorTargetMeta)(path);
-        const mapper = (0,_utils__WEBPACK_IMPORTED_MODULE_0__.getMapperForPath)(path);
         const leafKeys = Object.entries(schema.properties).filter(([, childSchema]) => {
           const childType = childSchema?.type;
           return childType === "string" || childType === "number" || childType === "boolean";
         }).map(([key]) => key);
+        const styleStrategy = getStyleStrategyForPath(path);
 
         // Only expose object paths that are directly actionable.
         // This avoids surfacing container/typo paths like `style.brder`
         // that have nested children but no usable direct value contract.
-        if (leafKeys.length || mapper || colorMeta.channel) {
+        if ((leafKeys.length || colorMeta.channel) && styleStrategy) {
           candidates.push({
             path,
             valueKind: "object",
             leafKeys,
-            mapper,
+            styleStrategy,
             sourceKind: colorMeta.sourceKind,
             channel: colorMeta.channel
           });
@@ -766,16 +811,20 @@ const listAttributeCandidates = (attributes, pathPrefix = "", depth = 0) => {
       return;
     }
 
-    // Skip generic object-type attributes without explicit mappers
+    // Skip generic object-type attributes without explicit CSS mapping
     // to prevent selecting overly broad paths like "style"
     if (valueKind === "object" || forbiddenPaths.has(path)) {
+      return;
+    }
+    const cssProperty = (0,_utils__WEBPACK_IMPORTED_MODULE_0__.getCssPropertyForPath)(path);
+    if (!cssProperty) {
       return;
     }
     candidates.push({
       path,
       valueKind,
       leafKeys: [],
-      mapper: "",
+      cssProperty,
       ...(0,_color_utils__WEBPACK_IMPORTED_MODULE_1__.getColorTargetMeta)(path)
     });
   });
@@ -1149,6 +1198,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   clone: () => (/* binding */ clone),
 /* harmony export */   cssPropToJsProp: () => (/* binding */ cssPropToJsProp),
 /* harmony export */   encodePathKey: () => (/* binding */ encodePathKey),
+/* harmony export */   getCssPropertyForPath: () => (/* binding */ getCssPropertyForPath),
 /* harmony export */   getMapperForPath: () => (/* binding */ getMapperForPath),
 /* harmony export */   getResponsiveValue: () => (/* binding */ getResponsiveValue),
 /* harmony export */   getValueAtPath: () => (/* binding */ getValueAtPath),
@@ -1211,6 +1261,33 @@ const encodePathKey = path => path.replace(/\./g, "__");
 const normalizePath = path => String(path || "").trim();
 const getMapperForPath = path => {
   return SUPPORTED_PATH_TO_MAPPER[normalizePath(path)] || "";
+};
+const getCssPropertyForPath = path => {
+  const normalizedPath = normalizePath(path);
+  if (!normalizedPath || normalizedPath === "style") {
+    return "";
+  }
+  const segments = normalizedPath.split(".");
+  const leaf = segments[segments.length - 1];
+  if (segments[0] !== "style") {
+    return camelToKebab(leaf);
+  }
+  const namespace = segments[1] || "";
+  if (namespace === "color") {
+    if (leaf === "text") return "color";
+    if (leaf === "background") return "background-color";
+  }
+  if (namespace === "border") {
+    if (leaf === "color") return "border-color";
+  }
+  if (namespace === "spacing" && leaf === "blockGap") {
+    return "gap";
+  }
+  if (namespace === "dimensions") {
+    if (leaf === "minHeight") return "min-height";
+    if (leaf === "aspectRatio") return "aspect-ratio";
+  }
+  return camelToKebab(leaf);
 };
 
 /**

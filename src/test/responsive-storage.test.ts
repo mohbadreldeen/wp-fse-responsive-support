@@ -14,7 +14,7 @@ const makeTarget = (
 	path: "style.color.background",
 	valueKind: "scalar",
 	leafKeys: [],
-	mapper: "backgroundColor",
+	cssProperty: "background-color",
 	...overrides,
 });
 
@@ -34,7 +34,7 @@ describe("setResponsiveValue", () => {
 			path: "style.spacing.padding",
 			valueKind: "object",
 			leafKeys: ["top", "right", "bottom", "left"],
-			mapper: "spacingPadding",
+			styleStrategy: "padding",
 		});
 
 		const existing = {
@@ -84,7 +84,7 @@ describe("setResponsiveValue", () => {
 	it("removes style.color.background when backgroundColor is set", () => {
 		const target = makeTarget({
 			path: "backgroundColor",
-			mapper: "backgroundColor",
+			cssProperty: "background-color",
 		});
 		const existing = {
 			responsiveStyles: {
@@ -105,7 +105,7 @@ describe("setResponsiveValue", () => {
 	it("keeps text aliases mutually exclusive", () => {
 		const target = makeTarget({
 			path: "style.color.text",
-			mapper: "textColor",
+			cssProperty: "color",
 		});
 		const existing = {
 			responsiveStyles: {
@@ -124,7 +124,7 @@ describe("setResponsiveValue", () => {
 	it("removes borderColor when style.border.color is set", () => {
 		const target = makeTarget({
 			path: "style.border.color",
-			mapper: "borderColor",
+			cssProperty: "border-color",
 		});
 		const existing = {
 			responsiveStyles: {
@@ -143,7 +143,7 @@ describe("setResponsiveValue", () => {
 	it("removes style.border.color when borderColor is set", () => {
 		const target = makeTarget({
 			path: "borderColor",
-			mapper: "borderColor",
+			cssProperty: "border-color",
 		});
 		const existing = {
 			responsiveStyles: {
@@ -249,11 +249,11 @@ describe("getResponsiveValueWithFallback", () => {
 	it("suppresses preset alias when style alias exists on current device", () => {
 		const presetTarget = makeTarget({
 			path: "backgroundColor",
-			mapper: "backgroundColor",
+			cssProperty: "background-color",
 		});
 		const styleTarget = makeTarget({
 			path: "style.color.background",
-			mapper: "backgroundColor",
+			cssProperty: "background-color",
 		});
 		const attributes = {
 			responsiveStyles: {
@@ -277,7 +277,7 @@ describe("getResponsiveValueWithFallback", () => {
 	it("suppresses preset alias when style alias exists in fallback chain", () => {
 		const presetTarget = makeTarget({
 			path: "backgroundColor",
-			mapper: "backgroundColor",
+			cssProperty: "background-color",
 		});
 		const attributes = {
 			responsiveStyles: {
@@ -298,7 +298,7 @@ describe("getResponsiveValueWithFallback", () => {
 	it("keeps explicit mobile preset alias over tablet style fallback", () => {
 		const presetTarget = makeTarget({
 			path: "backgroundColor",
-			mapper: "backgroundColor",
+			cssProperty: "background-color",
 		});
 		const attributes = {
 			responsiveStyles: {
@@ -322,7 +322,7 @@ describe("getResponsiveValueWithFallback", () => {
 	it("does not hydrate a style alias through an explicit preset on the current device", () => {
 		const styleTarget = makeTarget({
 			path: "style.border.color",
-			mapper: "borderColor",
+			cssProperty: "border-color",
 		});
 		const attributes = {
 			responsiveStyles: {
@@ -343,7 +343,7 @@ describe("getResponsiveValueWithFallback", () => {
 	it("does not hydrate a style alias through an explicit preset in the fallback chain", () => {
 		const styleTarget = makeTarget({
 			path: "style.border.color",
-			mapper: "borderColor",
+			cssProperty: "border-color",
 		});
 		const attributes = {
 			responsiveStyles: {

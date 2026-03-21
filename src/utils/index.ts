@@ -64,6 +64,42 @@ export const getMapperForPath = (path: string) => {
 	return SUPPORTED_PATH_TO_MAPPER[normalizePath(path)] || "";
 };
 
+export const getCssPropertyForPath = (path: string) => {
+	const normalizedPath = normalizePath(path);
+	if (!normalizedPath || normalizedPath === "style") {
+		return "";
+	}
+
+	const segments = normalizedPath.split(".");
+	const leaf = segments[segments.length - 1];
+
+	if (segments[0] !== "style") {
+		return camelToKebab(leaf);
+	}
+
+	const namespace = segments[1] || "";
+
+	if (namespace === "color") {
+		if (leaf === "text") return "color";
+		if (leaf === "background") return "background-color";
+	}
+
+	if (namespace === "border") {
+		if (leaf === "color") return "border-color";
+	}
+
+	if (namespace === "spacing" && leaf === "blockGap") {
+		return "gap";
+	}
+
+	if (namespace === "dimensions") {
+		if (leaf === "minHeight") return "min-height";
+		if (leaf === "aspectRatio") return "aspect-ratio";
+	}
+
+	return camelToKebab(leaf);
+};
+
 /**
  * Read a nested value using dot notation.
  * Example:
