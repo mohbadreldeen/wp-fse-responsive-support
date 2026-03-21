@@ -1,8 +1,10 @@
 import { createHigherOrderComponent } from "@wordpress/compose";
 import { useSelect } from "@wordpress/data";
 import { cssPropToJsProp } from "../utils";
+import { resolvePresetColorValue } from "./color-utils";
 import { useActiveTargets } from "./targets-store";
 import { getResponsiveValueWithFallback } from "./responsive-targets";
+import { expandTrackedTargets } from "./responsive-target-families";
 import { previewAdapterRegistry } from "./preview-adapter-registry";
 import "./preview-adapters/index";
 import type {
@@ -13,7 +15,8 @@ import type {
 export const withResponsivePreview = createHigherOrderComponent(
 	(BlockListBlock: any) => {
 		return (props: any) => {
-			const targets = useActiveTargets(props.name);
+			const activeTargets = useActiveTargets(props.name);
+			const targets = expandTrackedTargets(activeTargets);
 			if (!targets.length) {
 				return <BlockListBlock {...props} />;
 			}
@@ -23,11 +26,12 @@ export const withResponsivePreview = createHigherOrderComponent(
 					(select("core/editor") as any).getDeviceType?.() || "Desktop",
 				[],
 			);
+			const paletteColors = useSelect(
+				(select) =>
+					(select("core/block-editor") as any)?.getSettings?.()?.colors || [],
+				[],
+			) as Array<{ slug?: string; color?: string }>;
 			const device = ((deviceType as string) || "Desktop").toLowerCase();
-
-			if (device === "desktop") {
-				return <BlockListBlock {...props} />;
-			}
 
 			const { attributes } = props;
 			const previewStyles: Record<string, string | number> = {};
@@ -59,7 +63,10 @@ export const withResponsivePreview = createHigherOrderComponent(
 				}
 
 				if ("cssProperty" in result) {
-					previewStyles[cssPropToJsProp(result.cssProperty)] = result.cssValue;
+					previewStyles[cssPropToJsProp(result.cssProperty)] =
+						typeof result.cssValue === "string"
+							? resolvePresetColorValue(result.cssValue, paletteColors)
+							: result.cssValue;
 					if (target.channel && target.sourceKind) {
 						resolvedChannels[target.channel] = target.sourceKind;
 					}
@@ -70,7 +77,10 @@ export const withResponsivePreview = createHigherOrderComponent(
 					Object.entries(result.cssProperties).forEach(([prop, val]) => {
 						// Adapter may emit kebab-case or already-camelCase keys.
 						const jsProp = prop.includes("-") ? cssPropToJsProp(prop) : prop;
-						previewStyles[jsProp] = val;
+						previewStyles[jsProp] =
+							typeof val === "string"
+								? resolvePresetColorValue(val, paletteColors)
+								: val;
 					});
 				}
 			});

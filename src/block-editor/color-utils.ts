@@ -6,6 +6,11 @@ export type ColorTargetMeta = {
 	channel: ResponsiveColorChannel | undefined;
 };
 
+type PaletteColor = {
+	slug?: string;
+	color?: string;
+};
+
 const COLOR_META_MAP: Record<string, ColorTargetMeta> = {
 	"style.color.text": { sourceKind: "style-value", channel: "text" },
 	"style.color.background": {
@@ -23,6 +28,49 @@ const GENERIC_META: ColorTargetMeta = {
 	channel: undefined,
 };
 
+const extractPresetSlug = (rawValue: string): string => {
+	const value = String(rawValue || "").trim();
+
+	if (value.startsWith("var:preset|color|")) {
+		return value.slice("var:preset|color|".length);
+	}
+
+	const cssVarMatch = value.match(
+		/^var\(--wp--preset--color--([a-z0-9-]+)\)$/i,
+	);
+	if (cssVarMatch?.[1]) {
+		return cssVarMatch[1];
+	}
+
+	if (
+		value &&
+		!value.startsWith("#") &&
+		!value.startsWith("rgb(") &&
+		!value.startsWith("rgba(") &&
+		!value.startsWith("hsl(") &&
+		!value.startsWith("hsla(") &&
+		!value.startsWith("var(")
+	) {
+		return value;
+	}
+
+	return "";
+};
+
+const findPaletteColor = (
+	paletteColors: PaletteColor[] = [],
+	slug: string,
+): string | undefined => {
+	if (!slug) {
+		return undefined;
+	}
+
+	const match = paletteColors.find((entry) => entry?.slug === slug);
+	return typeof match?.color === "string" && match.color
+		? match.color
+		: undefined;
+};
+
 export const getColorTargetMeta = (path: string): ColorTargetMeta =>
 	COLOR_META_MAP[normalizePath(path)] ?? GENERIC_META;
 
@@ -35,10 +83,19 @@ export const getColorTargetMeta = (path: string): ColorTargetMeta =>
  *   any CSS color literal           → returned as-is
  *   plain slug e.g. "vivid-red"    → var(--wp--preset--color--vivid-red)
  */
-export const resolvePresetColorValue = (rawValue: string): string => {
+export const resolvePresetColorValue = (
+	rawValue: string,
+	paletteColors: PaletteColor[] = [],
+): string => {
 	const value = String(rawValue || "").trim();
 	if (!value) {
 		return value;
+	}
+
+	const presetSlug = extractPresetSlug(value);
+	const paletteColor = findPaletteColor(paletteColors, presetSlug);
+	if (paletteColor) {
+		return paletteColor;
 	}
 
 	if (value.startsWith("var(--wp--preset--color--")) {

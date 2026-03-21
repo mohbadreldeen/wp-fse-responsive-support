@@ -45,6 +45,27 @@ const GENERIC_META = {
   sourceKind: "generic",
   channel: undefined
 };
+const extractPresetSlug = rawValue => {
+  const value = String(rawValue || "").trim();
+  if (value.startsWith("var:preset|color|")) {
+    return value.slice("var:preset|color|".length);
+  }
+  const cssVarMatch = value.match(/^var\(--wp--preset--color--([a-z0-9-]+)\)$/i);
+  if (cssVarMatch?.[1]) {
+    return cssVarMatch[1];
+  }
+  if (value && !value.startsWith("#") && !value.startsWith("rgb(") && !value.startsWith("rgba(") && !value.startsWith("hsl(") && !value.startsWith("hsla(") && !value.startsWith("var(")) {
+    return value;
+  }
+  return "";
+};
+const findPaletteColor = (paletteColors = [], slug) => {
+  if (!slug) {
+    return undefined;
+  }
+  const match = paletteColors.find(entry => entry?.slug === slug);
+  return typeof match?.color === "string" && match.color ? match.color : undefined;
+};
 const getColorTargetMeta = path => COLOR_META_MAP[(0,_utils__WEBPACK_IMPORTED_MODULE_0__.normalizePath)(path)] ?? GENERIC_META;
 
 /**
@@ -56,10 +77,15 @@ const getColorTargetMeta = path => COLOR_META_MAP[(0,_utils__WEBPACK_IMPORTED_MO
  *   any CSS color literal           → returned as-is
  *   plain slug e.g. "vivid-red"    → var(--wp--preset--color--vivid-red)
  */
-const resolvePresetColorValue = rawValue => {
+const resolvePresetColorValue = (rawValue, paletteColors = []) => {
   const value = String(rawValue || "").trim();
   if (!value) {
     return value;
+  }
+  const presetSlug = extractPresetSlug(value);
+  const paletteColor = findPaletteColor(paletteColors, presetSlug);
+  if (paletteColor) {
+    return paletteColor;
   }
   if (value.startsWith("var(--wp--preset--color--")) {
     return value;
@@ -505,6 +531,73 @@ const spacingObjectAdapter = {
 
 /***/ },
 
+/***/ "./src/block-editor/responsive-target-families.ts"
+/*!********************************************************!*\
+  !*** ./src/block-editor/responsive-target-families.ts ***!
+  \********************************************************/
+(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
+
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   expandTrackedTargets: () => (/* binding */ expandTrackedTargets),
+/* harmony export */   getSiblingAliasPath: () => (/* binding */ getSiblingAliasPath)
+/* harmony export */ });
+/* harmony import */ var _color_utils__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./color-utils */ "./src/block-editor/color-utils.ts");
+
+const COLOR_CHANNEL_STYLE_PATHS = {
+  text: "style.color.text",
+  background: "style.color.background",
+  border: "style.border.color"
+};
+const getColorFamilyPaths = target => {
+  if (!target.channel || !target.mapper) {
+    return [target.path];
+  }
+  const stylePath = COLOR_CHANNEL_STYLE_PATHS[target.channel];
+  if (!stylePath) {
+    return [target.path];
+  }
+  return Array.from(new Set([stylePath, target.mapper]));
+};
+const getSiblingAliasPath = target => {
+  const familyPaths = getColorFamilyPaths(target);
+  return familyPaths.find(path => path !== target.path);
+};
+const getTrackedTargetPriority = target => {
+  if (target.sourceKind === "preset-slug") {
+    return 0;
+  }
+  if (target.sourceKind === "style-value") {
+    return 2;
+  }
+  return 1;
+};
+const expandTrackedTargets = targets => {
+  const trackedTargets = new Map();
+  targets.forEach(target => {
+    trackedTargets.set(target.path, target);
+    if (!target.channel || !target.mapper) {
+      return;
+    }
+    getColorFamilyPaths(target).forEach(path => {
+      if (trackedTargets.has(path)) {
+        return;
+      }
+      const colorMeta = (0,_color_utils__WEBPACK_IMPORTED_MODULE_0__.getColorTargetMeta)(path);
+      trackedTargets.set(path, {
+        ...target,
+        path,
+        mapper: target.mapper,
+        sourceKind: colorMeta.sourceKind,
+        channel: colorMeta.channel
+      });
+    });
+  });
+  return Array.from(trackedTargets.values()).sort((left, right) => getTrackedTargetPriority(left) - getTrackedTargetPriority(right));
+};
+
+/***/ },
+
 /***/ "./src/block-editor/responsive-targets-modal.tsx"
 /*!*******************************************************!*\
   !*** ./src/block-editor/responsive-targets-modal.tsx ***!
@@ -841,6 +934,7 @@ const PRESET_TO_STYLE_ALIAS = {
   textColor: "style.color.text",
   borderColor: "style.border.color"
 };
+const STYLE_TO_PRESET_ALIAS = Object.fromEntries(Object.entries(PRESET_TO_STYLE_ALIAS).map(([presetPath, stylePath]) => [stylePath, presetPath]));
 const setResponsiveValue = (attributes, device, target, value) => {
   const nextResponsiveStyles = (0,_utils__WEBPACK_IMPORTED_MODULE_0__.clone)(attributes?.responsiveStyles || {});
   if (!(0,_utils__WEBPACK_IMPORTED_MODULE_0__.isObject)(nextResponsiveStyles[device])) {
@@ -903,22 +997,24 @@ const getResponsiveValue = (attributes, device, target) => {
 const getResponsiveValueWithFallback = (attributes, device, target, includeCurrentDevice = true) => {
   const fallbackChain = getDeviceFallbackChain(device);
   const devicesToCheck = includeCurrentDevice ? fallbackChain : fallbackChain.slice(1);
-  const styleAliasPath = PRESET_TO_STYLE_ALIAS[target.path];
-  const styleAliasTarget = styleAliasPath ? {
+  const siblingAliasPath = PRESET_TO_STYLE_ALIAS[target.path] || STYLE_TO_PRESET_ALIAS[target.path];
+  const siblingAliasTarget = siblingAliasPath ? {
     ...target,
-    path: styleAliasPath
+    path: siblingAliasPath
   } : null;
   for (const fallbackDevice of devicesToCheck) {
-    if (styleAliasTarget) {
-      const styleAliasValue = getResponsiveValue(attributes, fallbackDevice, styleAliasTarget);
-      if (styleAliasValue !== undefined) {
-        // Style-value aliases win at this precedence level, and block lower-level preset fallback.
+    const directValue = getResponsiveValue(attributes, fallbackDevice, target);
+    if (directValue !== undefined) {
+      return directValue;
+    }
+    if (siblingAliasTarget) {
+      const siblingAliasValue = getResponsiveValue(attributes, fallbackDevice, siblingAliasTarget);
+      if (siblingAliasValue !== undefined) {
+        // Any explicit family member at this precedence level blocks fallback to lower devices.
+        // For preset targets, the style sibling wins. For style targets, the preset sibling means
+        // this path should stay unset at this level.
         return undefined;
       }
-    }
-    const value = getResponsiveValue(attributes, fallbackDevice, target);
-    if (value !== undefined) {
-      return value;
     }
   }
   return undefined;
@@ -1201,6 +1297,7 @@ const useActiveTargets = blockName => {
 
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   __withResponsiveLogicTestUtils: () => (/* binding */ __withResponsiveLogicTestUtils),
 /* harmony export */   withResponsiveLogic: () => (/* binding */ withResponsiveLogic)
 /* harmony export */ });
 /* harmony import */ var react__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! react */ "react");
@@ -1213,9 +1310,11 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _wordpress_data__WEBPACK_IMPORTED_MODULE_3___default = /*#__PURE__*/__webpack_require__.n(_wordpress_data__WEBPACK_IMPORTED_MODULE_3__);
 /* harmony import */ var _utils__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ../utils */ "./src/utils/index.ts");
 /* harmony import */ var _targets_store__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./targets-store */ "./src/block-editor/targets-store.ts");
-/* harmony import */ var _responsive_targets__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ./responsive-targets */ "./src/block-editor/responsive-targets.ts");
-/* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! react/jsx-runtime */ "react/jsx-runtime");
-/* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7___default = /*#__PURE__*/__webpack_require__.n(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__);
+/* harmony import */ var _responsive_target_families__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ./responsive-target-families */ "./src/block-editor/responsive-target-families.ts");
+/* harmony import */ var _responsive_targets__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! ./responsive-targets */ "./src/block-editor/responsive-targets.ts");
+/* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(/*! react/jsx-runtime */ "react/jsx-runtime");
+/* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_8___default = /*#__PURE__*/__webpack_require__.n(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_8__);
+
 
 
 
@@ -1242,11 +1341,11 @@ const hasPathInObject = (object, path) => {
 const cloneResponsiveStyles = attributes => (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(attributes?.responsiveStyles || {});
 const writeResponsiveValue = (responsiveStyles, device, target, value) => {
   if (value === undefined) {
-    return (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.removeResponsiveValue)({
+    return (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_7__.removeResponsiveValue)({
       responsiveStyles
     }, device, target);
   }
-  return (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.setResponsiveValue)({
+  return (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_7__.setResponsiveValue)({
     responsiveStyles
   }, device, target, value);
 };
@@ -1256,12 +1355,38 @@ const areValuesEqual = (left, right) => {
   }
   return JSON.stringify(left) === JSON.stringify(right);
 };
+
+/**
+ * Build a minimal setAttributes patch containing only top-level keys
+ * whose values changed between the original and modified objects.
+ * Keys explicitly set to undefined in modified are included so
+ * Gutenberg can unset them.
+ */
+const buildTopLevelPatch = (original, modified) => {
+  const patch = {};
+  for (const key of Object.keys(modified)) {
+    if (!areValuesEqual(original[key], modified[key])) {
+      patch[key] = modified[key];
+    }
+  }
+
+  // Include keys that existed in original but are now undefined in modified.
+  for (const key of Object.keys(original)) {
+    if (modified[key] === undefined && original[key] !== undefined) {
+      patch[key] = undefined;
+    }
+  }
+  return patch;
+};
+const applyLiveAttributeValue = (attributes, path, value) => {
+  return (0,_utils__WEBPACK_IMPORTED_MODULE_4__.setValueAtPath)(attributes, path, value);
+};
 const buildMountSyncAttributes = (attributes, targets) => {
   const nextAttributes = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(attributes);
   let nextResponsiveStyles = cloneResponsiveStyles(attributes);
   let needsUpdate = false;
   targets.forEach(target => {
-    const desktopValue = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.getResponsiveValue)({
+    const desktopValue = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_7__.getResponsiveValue)({
       responsiveStyles: nextResponsiveStyles
     }, "desktop", target);
     if (desktopValue === undefined) {
@@ -1280,16 +1405,16 @@ const buildMountSyncAttributes = (attributes, targets) => {
     return null;
   }
   nextAttributes.responsiveStyles = nextResponsiveStyles;
-  return nextAttributes;
+  return buildTopLevelPatch(attributes, nextAttributes);
 };
 const buildDeviceSyncAttributes = (attributes, targets, previousDevice, device) => {
   let nextResponsiveStyles = cloneResponsiveStyles(attributes);
   targets.forEach(target => {
     const liveValue = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.getValueAtPath)(attributes, target.path);
-    const explicitPreviousValue = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.getResponsiveValue)({
+    const explicitPreviousValue = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_7__.getResponsiveValue)({
       responsiveStyles: nextResponsiveStyles
     }, previousDevice, target);
-    const inheritedPreviousValue = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.getResponsiveValueWithFallback)({
+    const inheritedPreviousValue = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_7__.getResponsiveValueWithFallback)({
       responsiveStyles: nextResponsiveStyles
     }, previousDevice, target, false);
     const shouldRemoveInheritedWrite = explicitPreviousValue === undefined && areValuesEqual(liveValue, inheritedPreviousValue);
@@ -1298,13 +1423,14 @@ const buildDeviceSyncAttributes = (attributes, targets, previousDevice, device) 
   });
   const nextAttributes = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(attributes);
   targets.forEach(target => {
-    const currentDeviceValue = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_6__.getResponsiveValueWithFallback)({
+    const currentDeviceValue = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_7__.getResponsiveValueWithFallback)({
       responsiveStyles: nextResponsiveStyles
     }, device, target);
-    (0,_utils__WEBPACK_IMPORTED_MODULE_4__.setValueAtPath)(nextAttributes, target.path, currentDeviceValue === undefined ? undefined : (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(currentDeviceValue));
+    const normalizedCurrentDeviceValue = currentDeviceValue === undefined ? undefined : (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(currentDeviceValue);
+    applyLiveAttributeValue(nextAttributes, target.path, normalizedCurrentDeviceValue);
   });
   nextAttributes.responsiveStyles = nextResponsiveStyles;
-  return nextAttributes;
+  return buildTopLevelPatch(attributes, nextAttributes);
 };
 const buildResponsiveAttributeUpdate = (attributes, newAttrs, device, targets) => {
   let nextResponsiveStyles = cloneResponsiveStyles(attributes);
@@ -1337,6 +1463,10 @@ const buildResponsiveAttributeUpdate = (attributes, newAttrs, device, targets) =
     responsiveStyles: nextResponsiveStyles
   };
 };
+const __withResponsiveLogicTestUtils = {
+  buildDeviceSyncAttributes,
+  buildResponsiveAttributeUpdate
+};
 const scheduleSyncReset = syncRef => {
   requestAnimationFrame(() => {
     syncRef.current = false;
@@ -1344,9 +1474,10 @@ const scheduleSyncReset = syncRef => {
 };
 const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.createHigherOrderComponent)(BlockEdit => {
   return props => {
-    const targets = (0,_targets_store__WEBPACK_IMPORTED_MODULE_5__.useActiveTargets)(props.name);
+    const activeTargets = (0,_targets_store__WEBPACK_IMPORTED_MODULE_5__.useActiveTargets)(props.name);
+    const targets = (0,_responsive_target_families__WEBPACK_IMPORTED_MODULE_6__.expandTrackedTargets)(activeTargets);
     if (!targets.length) {
-      return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)(BlockEdit, {
+      return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_8__.jsx)(BlockEdit, {
         ...props
       });
     }
@@ -1361,16 +1492,20 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
     const attrsRef = (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_2__.useRef)(attributes);
     const didMountRef = (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_2__.useRef)(false);
     attrsRef.current = attributes;
-    const applySyncedAttributes = nextAttributes => {
+    const applySyncedAttributes = patch => {
       isSyncingRef.current = true;
-      setAttributes(nextAttributes);
+      attrsRef.current = {
+        ...attrsRef.current,
+        ...patch
+      };
+      setAttributes(patch);
       scheduleSyncReset(isSyncingRef);
     };
 
     /**
      * Run only once onMount
      */
-    (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_2__.useEffect)(() => {
+    (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_2__.useLayoutEffect)(() => {
       if (didMountRef.current) {
         return;
       }
@@ -1384,14 +1519,16 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
     /**
      * Run after every device preview change
      */
-    (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_2__.useEffect)(() => {
+    (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_2__.useLayoutEffect)(() => {
       if (prevDeviceRef.current === device) {
         return;
       }
       const previousDevice = prevDeviceRef.current;
       prevDeviceRef.current = device;
       const nextAttributes = buildDeviceSyncAttributes(attrsRef.current, targets, previousDevice, device);
-      applySyncedAttributes(nextAttributes);
+      requestAnimationFrame(() => {
+        applySyncedAttributes(nextAttributes);
+      });
     }, [device]); // eslint-disable-line react-hooks/exhaustive-deps
 
     /**
@@ -1410,10 +1547,11 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
       }
       setAttributes(nextAttributes);
     };
-    return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)(BlockEdit, {
+    return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_8__.jsx)(BlockEdit, {
       ...props,
       setAttributes: interceptedSetAttributes
     });
+    // return <BlockEdit {...props} />;
   };
 }, "withResponsiveLogic");
 
@@ -1434,12 +1572,16 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _wordpress_data__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! @wordpress/data */ "@wordpress/data");
 /* harmony import */ var _wordpress_data__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(_wordpress_data__WEBPACK_IMPORTED_MODULE_1__);
 /* harmony import */ var _utils__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ../utils */ "./src/utils/index.ts");
-/* harmony import */ var _targets_store__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./targets-store */ "./src/block-editor/targets-store.ts");
-/* harmony import */ var _responsive_targets__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./responsive-targets */ "./src/block-editor/responsive-targets.ts");
-/* harmony import */ var _preview_adapter_registry__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./preview-adapter-registry */ "./src/block-editor/preview-adapter-registry.ts");
-/* harmony import */ var _preview_adapters_index__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ./preview-adapters/index */ "./src/block-editor/preview-adapters/index.ts");
-/* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! react/jsx-runtime */ "react/jsx-runtime");
-/* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7___default = /*#__PURE__*/__webpack_require__.n(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__);
+/* harmony import */ var _color_utils__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./color-utils */ "./src/block-editor/color-utils.ts");
+/* harmony import */ var _targets_store__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./targets-store */ "./src/block-editor/targets-store.ts");
+/* harmony import */ var _responsive_targets__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./responsive-targets */ "./src/block-editor/responsive-targets.ts");
+/* harmony import */ var _responsive_target_families__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ./responsive-target-families */ "./src/block-editor/responsive-target-families.ts");
+/* harmony import */ var _preview_adapter_registry__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! ./preview-adapter-registry */ "./src/block-editor/preview-adapter-registry.ts");
+/* harmony import */ var _preview_adapters_index__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(/*! ./preview-adapters/index */ "./src/block-editor/preview-adapters/index.ts");
+/* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(/*! react/jsx-runtime */ "react/jsx-runtime");
+/* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_9___default = /*#__PURE__*/__webpack_require__.n(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_9__);
+
+
 
 
 
@@ -1450,30 +1592,27 @@ __webpack_require__.r(__webpack_exports__);
 
 const withResponsivePreview = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_0__.createHigherOrderComponent)(BlockListBlock => {
   return props => {
-    const targets = (0,_targets_store__WEBPACK_IMPORTED_MODULE_3__.useActiveTargets)(props.name);
+    const activeTargets = (0,_targets_store__WEBPACK_IMPORTED_MODULE_4__.useActiveTargets)(props.name);
+    const targets = (0,_responsive_target_families__WEBPACK_IMPORTED_MODULE_6__.expandTrackedTargets)(activeTargets);
     if (!targets.length) {
-      return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)(BlockListBlock, {
+      return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_9__.jsx)(BlockListBlock, {
         ...props
       });
     }
     const deviceType = (0,_wordpress_data__WEBPACK_IMPORTED_MODULE_1__.useSelect)(select => select("core/editor").getDeviceType?.() || "Desktop", []);
+    const paletteColors = (0,_wordpress_data__WEBPACK_IMPORTED_MODULE_1__.useSelect)(select => select("core/block-editor")?.getSettings?.()?.colors || [], []);
     const device = (deviceType || "Desktop").toLowerCase();
-    if (device === "desktop") {
-      return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)(BlockListBlock, {
-        ...props
-      });
-    }
     const {
       attributes
     } = props;
     const previewStyles = {};
     const resolvedChannels = {};
     targets.forEach(target => {
-      const responsiveValue = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_4__.getResponsiveValueWithFallback)(attributes, device, target);
+      const responsiveValue = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_5__.getResponsiveValueWithFallback)(attributes, device, target);
       if (responsiveValue === undefined) {
         return;
       }
-      const adapter = _preview_adapter_registry__WEBPACK_IMPORTED_MODULE_5__.previewAdapterRegistry.resolve(target);
+      const adapter = _preview_adapter_registry__WEBPACK_IMPORTED_MODULE_7__.previewAdapterRegistry.resolve(target);
       if (!adapter) {
         return;
       }
@@ -1482,7 +1621,7 @@ const withResponsivePreview = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_0__
         return;
       }
       if ("cssProperty" in result) {
-        previewStyles[(0,_utils__WEBPACK_IMPORTED_MODULE_2__.cssPropToJsProp)(result.cssProperty)] = result.cssValue;
+        previewStyles[(0,_utils__WEBPACK_IMPORTED_MODULE_2__.cssPropToJsProp)(result.cssProperty)] = typeof result.cssValue === "string" ? (0,_color_utils__WEBPACK_IMPORTED_MODULE_3__.resolvePresetColorValue)(result.cssValue, paletteColors) : result.cssValue;
         if (target.channel && target.sourceKind) {
           resolvedChannels[target.channel] = target.sourceKind;
         }
@@ -1492,16 +1631,16 @@ const withResponsivePreview = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_0__
         Object.entries(result.cssProperties).forEach(([prop, val]) => {
           // Adapter may emit kebab-case or already-camelCase keys.
           const jsProp = prop.includes("-") ? (0,_utils__WEBPACK_IMPORTED_MODULE_2__.cssPropToJsProp)(prop) : prop;
-          previewStyles[jsProp] = val;
+          previewStyles[jsProp] = typeof val === "string" ? (0,_color_utils__WEBPACK_IMPORTED_MODULE_3__.resolvePresetColorValue)(val, paletteColors) : val;
         });
       }
     });
     if (!Object.keys(previewStyles).length) {
-      return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)(BlockListBlock, {
+      return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_9__.jsx)(BlockListBlock, {
         ...props
       });
     }
-    return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_7__.jsx)(BlockListBlock, {
+    return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_9__.jsx)(BlockListBlock, {
       ...props,
       wrapperProps: {
         ...(props.wrapperProps || {}),

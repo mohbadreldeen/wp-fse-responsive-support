@@ -1,10 +1,11 @@
 import React from "react";
 import { createHigherOrderComponent } from "@wordpress/compose";
-import { useEffect, useRef } from "@wordpress/element";
+import { useEffect, useLayoutEffect, useRef } from "@wordpress/element";
 import { useSelect } from "@wordpress/data";
 import { clone, isObject, getValueAtPath, setValueAtPath } from "../utils";
 import { useActiveTargets } from "./targets-store";
 import type { ResponsiveTarget } from "./types";
+import { expandTrackedTargets } from "./responsive-target-families";
 
 import {
 	getResponsiveValue,
@@ -63,6 +64,42 @@ const areValuesEqual = (left: any, right: any): boolean => {
 	return JSON.stringify(left) === JSON.stringify(right);
 };
 
+/**
+ * Build a minimal setAttributes patch containing only top-level keys
+ * whose values changed between the original and modified objects.
+ * Keys explicitly set to undefined in modified are included so
+ * Gutenberg can unset them.
+ */
+const buildTopLevelPatch = (
+	original: Record<string, any>,
+	modified: Record<string, any>,
+): Record<string, any> => {
+	const patch: Record<string, any> = {};
+
+	for (const key of Object.keys(modified)) {
+		if (!areValuesEqual(original[key], modified[key])) {
+			patch[key] = modified[key];
+		}
+	}
+
+	// Include keys that existed in original but are now undefined in modified.
+	for (const key of Object.keys(original)) {
+		if (modified[key] === undefined && original[key] !== undefined) {
+			patch[key] = undefined;
+		}
+	}
+
+	return patch;
+};
+
+const applyLiveAttributeValue = (
+	attributes: Record<string, any>,
+	path: string,
+	value: any,
+): Record<string, any> => {
+	return setValueAtPath(attributes, path, value);
+};
+
 const buildMountSyncAttributes = (
 	attributes: Record<string, any>,
 	targets: ResponsiveTarget[],
@@ -103,7 +140,7 @@ const buildMountSyncAttributes = (
 	}
 
 	nextAttributes.responsiveStyles = nextResponsiveStyles;
-	return nextAttributes;
+	return buildTopLevelPatch(attributes, nextAttributes);
 };
 
 const buildDeviceSyncAttributes = (
@@ -149,16 +186,18 @@ const buildDeviceSyncAttributes = (
 			device,
 			target,
 		);
+		const normalizedCurrentDeviceValue =
+			currentDeviceValue === undefined ? undefined : clone(currentDeviceValue);
 
-		setValueAtPath(
+		applyLiveAttributeValue(
 			nextAttributes,
 			target.path,
-			currentDeviceValue === undefined ? undefined : clone(currentDeviceValue),
+			normalizedCurrentDeviceValue,
 		);
 	});
 
 	nextAttributes.responsiveStyles = nextResponsiveStyles;
-	return nextAttributes;
+	return buildTopLevelPatch(attributes, nextAttributes);
 };
 
 const buildResponsiveAttributeUpdate = (
@@ -216,6 +255,11 @@ const buildResponsiveAttributeUpdate = (
 	};
 };
 
+export const __withResponsiveLogicTestUtils = {
+	buildDeviceSyncAttributes,
+	buildResponsiveAttributeUpdate,
+};
+
 const scheduleSyncReset = (syncRef: { current: boolean }) => {
 	requestAnimationFrame(() => {
 		syncRef.current = false;
@@ -225,7 +269,8 @@ const scheduleSyncReset = (syncRef: { current: boolean }) => {
 export const withResponsiveLogic = createHigherOrderComponent(
 	(BlockEdit: any) => {
 		return (props: any) => {
-			const targets = useActiveTargets(props.name);
+			const activeTargets = useActiveTargets(props.name);
+			const targets = expandTrackedTargets(activeTargets);
 
 			if (!targets.length) {
 				return <BlockEdit {...props} />;
@@ -244,16 +289,17 @@ export const withResponsiveLogic = createHigherOrderComponent(
 			const didMountRef = useRef(false);
 			attrsRef.current = attributes;
 
-			const applySyncedAttributes = (nextAttributes: Record<string, any>) => {
+			const applySyncedAttributes = (patch: Record<string, any>) => {
 				isSyncingRef.current = true;
-				setAttributes(nextAttributes);
+				attrsRef.current = { ...attrsRef.current, ...patch };
+				setAttributes(patch);
 				scheduleSyncReset(isSyncingRef);
 			};
 
 			/**
 			 * Run only once onMount
 			 */
-			useEffect(() => {
+			useLayoutEffect(() => {
 				if (didMountRef.current) {
 					return;
 				}
@@ -273,7 +319,7 @@ export const withResponsiveLogic = createHigherOrderComponent(
 			/**
 			 * Run after every device preview change
 			 */
-			useEffect(() => {
+			useLayoutEffect(() => {
 				if (prevDeviceRef.current === device) {
 					return;
 				}
@@ -288,7 +334,9 @@ export const withResponsiveLogic = createHigherOrderComponent(
 					device,
 				);
 
-				applySyncedAttributes(nextAttributes);
+				requestAnimationFrame(() => {
+					applySyncedAttributes(nextAttributes);
+				});
 			}, [device]); // eslint-disable-line react-hooks/exhaustive-deps
 
 			/**
@@ -317,6 +365,7 @@ export const withResponsiveLogic = createHigherOrderComponent(
 			};
 
 			return <BlockEdit {...props} setAttributes={interceptedSetAttributes} />;
+			// return <BlockEdit {...props} />;
 		};
 	},
 	"withResponsiveLogic",

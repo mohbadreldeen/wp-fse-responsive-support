@@ -78,6 +78,13 @@ const PRESET_TO_STYLE_ALIAS: Record<string, string> = {
 	borderColor: "style.border.color",
 };
 
+const STYLE_TO_PRESET_ALIAS: Record<string, string> = Object.fromEntries(
+	Object.entries(PRESET_TO_STYLE_ALIAS).map(([presetPath, stylePath]) => [
+		stylePath,
+		presetPath,
+	]),
+);
+
 export const setResponsiveValue = (
 	attributes: Record<string, any>,
 	device: string,
@@ -167,31 +174,34 @@ export const getResponsiveValueWithFallback = (
 	const devicesToCheck = includeCurrentDevice
 		? fallbackChain
 		: fallbackChain.slice(1);
-	const styleAliasPath = PRESET_TO_STYLE_ALIAS[target.path];
-	const styleAliasTarget = styleAliasPath
+	const siblingAliasPath =
+		PRESET_TO_STYLE_ALIAS[target.path] || STYLE_TO_PRESET_ALIAS[target.path];
+	const siblingAliasTarget = siblingAliasPath
 		? {
 				...target,
-				path: styleAliasPath,
+				path: siblingAliasPath,
 		  }
 		: null;
 
 	for (const fallbackDevice of devicesToCheck) {
-		if (styleAliasTarget) {
-			const styleAliasValue = getResponsiveValue(
-				attributes,
-				fallbackDevice,
-				styleAliasTarget,
-			);
-
-			if (styleAliasValue !== undefined) {
-				// Style-value aliases win at this precedence level, and block lower-level preset fallback.
-				return undefined;
-			}
+		const directValue = getResponsiveValue(attributes, fallbackDevice, target);
+		if (directValue !== undefined) {
+			return directValue;
 		}
 
-		const value = getResponsiveValue(attributes, fallbackDevice, target);
-		if (value !== undefined) {
-			return value;
+		if (siblingAliasTarget) {
+			const siblingAliasValue = getResponsiveValue(
+				attributes,
+				fallbackDevice,
+				siblingAliasTarget,
+			);
+
+			if (siblingAliasValue !== undefined) {
+				// Any explicit family member at this precedence level blocks fallback to lower devices.
+				// For preset targets, the style sibling wins. For style targets, the preset sibling means
+				// this path should stay unset at this level.
+				return undefined;
+			}
 		}
 	}
 

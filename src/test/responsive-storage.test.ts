@@ -318,4 +318,46 @@ describe("getResponsiveValueWithFallback", () => {
 			getResponsiveValueWithFallback(attributes, "mobile", presetTarget),
 		).toBe("brand");
 	});
+
+	it("does not hydrate a style alias through an explicit preset on the current device", () => {
+		const styleTarget = makeTarget({
+			path: "style.border.color",
+			mapper: "borderColor",
+		});
+		const attributes = {
+			responsiveStyles: {
+				desktop: {
+					[encodePathKey("style.border.color")]: "#ff0000",
+				},
+				tablet: {
+					[encodePathKey("borderColor")]: "contrast",
+				},
+			},
+		};
+
+		expect(
+			getResponsiveValueWithFallback(attributes, "tablet", styleTarget),
+		).toBe(undefined);
+	});
+
+	it("does not hydrate a style alias through an explicit preset in the fallback chain", () => {
+		const styleTarget = makeTarget({
+			path: "style.border.color",
+			mapper: "borderColor",
+		});
+		const attributes = {
+			responsiveStyles: {
+				tablet: {
+					[encodePathKey("borderColor")]: "contrast",
+				},
+				desktop: {
+					[encodePathKey("style.border.color")]: "#ff0000",
+				},
+			},
+		};
+
+		expect(
+			getResponsiveValueWithFallback(attributes, "mobile", styleTarget),
+		).toBe(undefined);
+	});
 });
