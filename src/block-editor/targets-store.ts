@@ -1,27 +1,18 @@
 import { useMemo } from "react";
-import {
-	createReduxStore,
-	dispatch,
-	register,
-	select,
-	useSelect,
-} from "@wordpress/data";
-import { ExtendedWindow, ResponsiveTarget } from "./types";
+import { createReduxStore, dispatch, register, useSelect } from "@wordpress/data";
+import { ResponsiveTarget } from "./types";
 import { normalizeTargets } from "./target-discovery";
+import { getRuntimeTargets } from "./runtime-settings";
 
-const runtimeSettings =
-	(window as ExtendedWindow)?.responsiveOverridesSettings || {};
-
-const ACTIVE_TARGETS_STORE_NAME = "responsive-overrides/active-targets";
+export const ACTIVE_TARGETS_STORE_NAME = "responsive-overrides/active-targets";
+const SET_ACTIVE_TARGETS = "SET_ACTIVE_TARGETS";
 
 type ActiveTargetsState = {
 	targets: ResponsiveTarget[];
 };
 
 const DEFAULT_ACTIVE_TARGETS_STATE: ActiveTargetsState = {
-	targets: normalizeTargets(
-		runtimeSettings?.config?.targets,
-	) as ResponsiveTarget[],
+	targets: normalizeTargets(getRuntimeTargets()) as ResponsiveTarget[],
 };
 
 const activeTargetsStore = createReduxStore(ACTIVE_TARGETS_STORE_NAME, {
@@ -30,7 +21,7 @@ const activeTargetsStore = createReduxStore(ACTIVE_TARGETS_STORE_NAME, {
 		action: { type: string; rawTargets?: unknown[] },
 	): ActiveTargetsState {
 		switch (action.type) {
-			case "SET_ACTIVE_TARGETS":
+			case SET_ACTIVE_TARGETS:
 				return {
 					...state,
 					targets: normalizeTargets(action.rawTargets) as ResponsiveTarget[],
@@ -42,7 +33,7 @@ const activeTargetsStore = createReduxStore(ACTIVE_TARGETS_STORE_NAME, {
 	actions: {
 		setActiveTargets(rawTargets: unknown[]) {
 			return {
-				type: "SET_ACTIVE_TARGETS",
+				type: SET_ACTIVE_TARGETS,
 				rawTargets,
 			};
 		},
@@ -54,19 +45,20 @@ const activeTargetsStore = createReduxStore(ACTIVE_TARGETS_STORE_NAME, {
 	},
 });
 
-register(activeTargetsStore);
+let hasRegisteredActiveTargetsStore = false;
 
-export const getActiveTargets = (): ResponsiveTarget[] => {
-	return (
-		((
-			select(ACTIVE_TARGETS_STORE_NAME) as any
-		)?.getActiveTargets?.() as ResponsiveTarget[]) || []
-	);
+export const registerActiveTargetsStore = (): void => {
+	if (hasRegisteredActiveTargetsStore) {
+		return;
+	}
+
+	register(activeTargetsStore);
+	hasRegisteredActiveTargetsStore = true;
 };
 
-export const setActiveTargets = (rawTargets: unknown[]) => {
+export const setActiveTargets = (rawTargets: unknown[]): ResponsiveTarget[] => {
 	(dispatch(ACTIVE_TARGETS_STORE_NAME) as any).setActiveTargets(rawTargets);
-	return getActiveTargets();
+	return normalizeTargets(rawTargets) as ResponsiveTarget[];
 };
 
 export const useActiveTargets = (blockName?: string): ResponsiveTarget[] => {

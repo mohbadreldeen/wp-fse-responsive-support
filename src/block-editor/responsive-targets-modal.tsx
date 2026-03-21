@@ -1,7 +1,6 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import * as editPost from "@wordpress/edit-post";
 import { __ } from "@wordpress/i18n";
-import { useSelect } from "@wordpress/data";
 import {
 	Modal,
 	Button,
@@ -10,15 +9,17 @@ import {
 	Notice,
 } from "@wordpress/components";
 import apiFetch from "@wordpress/api-fetch";
-import { listAttributeCandidates } from "./target-discovery";
-import { getActiveTargets, setActiveTargets } from "./targets-store";
+import { useFilteredDiscoverableBlocks } from "./discoverable-blocks";
+import { setActiveTargets, useActiveTargets } from "./targets-store";
+import {
+	DEFAULT_TARGETS_REST_PATH,
+	getRuntimeSettings,
+	setRuntimeTargets,
+} from "./runtime-settings";
 import type {
-	ExtendedWindow,
-	RuntimeSettings,
 	SelectedMap,
 	FeedbackState,
 	ApiTargetsResponse,
-	BlockType,
 	DiscoverableBlock,
 	ResponsiveTarget,
 } from "./types";
@@ -26,174 +27,153 @@ import type {
 const HeaderToolbarButton = (editPost as { PluginToolbarButton?: any })
 	?.PluginToolbarButton;
 
-const runtimeSettings: RuntimeSettings =
-	(window as ExtendedWindow)?.responsiveOverridesSettings || {};
+const FALLBACK_TOOLBAR_HOST_SELECTOR = ".editor-header .editor-header__settings";
+const FALLBACK_TOOLBAR_ANCHOR_SELECTOR =
+	".editor-post-preview-dropdown, .editor-preview-dropdown";
 
-const buildSearchTerms = (
-	block: DiscoverableBlock,
-	attribute?: ResponsiveTarget,
-): string[] => {
-	const terms = [block.name, block.title];
-
-	if (!attribute) {
-		return terms.map((term) => term.toLowerCase());
+const mountFallbackToolbarButton = (buttonEl: HTMLButtonElement): boolean => {
+	const headerSettings = document.querySelector(
+		FALLBACK_TOOLBAR_HOST_SELECTOR,
+	);
+	if (!headerSettings) {
+		return false;
 	}
 
-	terms.push(attribute.path);
-
-	if (attribute.cssProperty) {
-		terms.push(attribute.cssProperty);
+	if (document.body.contains(buttonEl)) {
+		return true;
 	}
 
-	if (attribute.styleStrategy) {
-		terms.push(attribute.styleStrategy);
+	const previewDropdown = headerSettings.querySelector(
+		FALLBACK_TOOLBAR_ANCHOR_SELECTOR,
+	);
+	if (previewDropdown?.parentNode) {
+		previewDropdown.parentNode.insertBefore(buttonEl, previewDropdown.nextSibling);
+		return true;
 	}
 
-	terms.push(`${block.name}/${attribute.path}`);
-
-	if (attribute.cssProperty) {
-		terms.push(`${block.name}/${attribute.cssProperty}`);
-	}
-
-	if (attribute.styleStrategy) {
-		terms.push(`${block.name}/${attribute.styleStrategy}`);
-	}
-
-	return terms.map((term) => term.toLowerCase());
+	headerSettings.appendChild(buttonEl);
+	return true;
 };
 
-const matchesSearch = (
-	block: DiscoverableBlock,
-	term: string,
-	attribute?: ResponsiveTarget,
-): boolean =>
-	buildSearchTerms(block, attribute).some((candidate) =>
-		candidate.includes(term),
+const createFallbackToolbarButton = (
+	onOpen: () => void,
+): { button: HTMLButtonElement; cleanup: () => void } => {
+	const button = document.createElement("button");
+	button.type = "button";
+	button.className = "components-button is-secondary";
+	button.textContent = __("Responsive", "responsive-overrides");
+	button.style.marginLeft = "8px";
+	button.setAttribute(
+		"aria-label",
+		__("Responsive Overrides", "responsive-overrides"),
 	);
+	button.addEventListener("click", onOpen);
+
+	return {
+		button,
+		cleanup: () => {
+			button.removeEventListener("click", onOpen);
+			button.remove();
+		},
+	};
+};
+
+const useFallbackToolbarButton = (enabled: boolean, onOpen: () => void): void => {
+	const onOpenRef = useRef(onOpen);
+	onOpenRef.current = onOpen;
+
+	useEffect(() => {
+		if (!enabled || typeof document === "undefined") {
+			return undefined;
+		}
+
+		const { button, cleanup } = createFallbackToolbarButton(() => {
+			onOpenRef.current();
+		});
+		const ensureButtonMounted = () => {
+			mountFallbackToolbarButton(button);
+		};
+
+		ensureButtonMounted();
+
+		if (typeof MutationObserver === "undefined") {
+			return cleanup;
+		}
+
+		const observer = new MutationObserver(() => {
+			ensureButtonMounted();
+		});
+
+		const observerTarget = document.body || document.documentElement;
+		if (observerTarget) {
+			observer.observe(observerTarget, {
+				childList: true,
+				subtree: true,
+			});
+		}
+
+		return () => {
+			observer.disconnect();
+			cleanup();
+		};
+	}, [enabled]);
+};
+
+const buildSelectionKey = (blockName: string, path: string): string =>
+	`${blockName}|${path}`;
+
+const buildSelectedMap = (targets: ResponsiveTarget[]): SelectedMap => {
+	const selected: SelectedMap = {};
+	targets.forEach((target) => {
+		selected[buildSelectionKey(target.block, target.path)] = target;
+	});
+	return selected;
+};
+
+const toSelectedTarget = (
+	blockName: string,
+	attribute: ResponsiveTarget,
+): ResponsiveTarget => ({
+	block: blockName,
+	path: attribute.path,
+	valueKind: attribute.valueKind,
+	leafKeys: attribute.leafKeys || [],
+	cssProperty: attribute.cssProperty || "",
+	styleStrategy: attribute.styleStrategy,
+	sourceKind: attribute.sourceKind,
+	channel: attribute.channel,
+});
 
 export const ResponsiveTargetsModal = () => {
+	const runtimeSettings = getRuntimeSettings();
+	const activeTargets = useActiveTargets();
 	const [isOpen, setIsOpen] = useState(false);
 	const [isSaving, setIsSaving] = useState(false);
 	const [search, setSearch] = useState("");
 	const [selectedMap, setSelectedMap] = useState<SelectedMap>({});
 	const [feedback, setFeedback] = useState<FeedbackState>(null);
+ 	const filteredBlocks = useFilteredDiscoverableBlocks(search);
+
+	useFallbackToolbarButton(!HeaderToolbarButton, () => setIsOpen(true));
 
 	useEffect(() => {
-		if (HeaderToolbarButton) {
-			return undefined;
+		if (!isOpen) {
+			return;
 		}
 
-		let buttonEl: HTMLButtonElement | null = null;
-		let intervalId: number | null = null;
-
-		const mountFallbackButton = () => {
-			if (buttonEl && document.body.contains(buttonEl)) {
-				return;
-			}
-
-			const headerSettings = document.querySelector(
-				".editor-header .editor-header__settings",
-			);
-			if (!headerSettings) {
-				return;
-			}
-
-			buttonEl = document.createElement("button");
-			buttonEl.type = "button";
-			buttonEl.className = "components-button is-secondary";
-			buttonEl.textContent = __("Responsive", "responsive-overrides");
-			buttonEl.style.marginLeft = "8px";
-			buttonEl.setAttribute(
-				"aria-label",
-				__("Responsive Overrides", "responsive-overrides"),
-			);
-			buttonEl.addEventListener("click", () => setIsOpen(true));
-
-			const previewDropdown = headerSettings.querySelector(
-				".editor-post-preview-dropdown, .editor-preview-dropdown",
-			);
-			if (previewDropdown && previewDropdown.parentNode) {
-				previewDropdown.parentNode.insertBefore(
-					buttonEl,
-					previewDropdown.nextSibling,
-				);
-			} else {
-				headerSettings.appendChild(buttonEl);
-			}
-		};
-
-		mountFallbackButton();
-		intervalId = window.setInterval(mountFallbackButton, 1200);
-
-		return () => {
-			if (intervalId) {
-				window.clearInterval(intervalId);
-			}
-			if (buttonEl && buttonEl.parentNode) {
-				buttonEl.parentNode.removeChild(buttonEl);
-			}
-		};
-	}, []);
-
-	const blockTypes = (useSelect((select) => {
-		return (select("core/blocks") as any)?.getBlockTypes?.() || [];
-	}, []) || []) as BlockType[];
-
-	const discovered = useMemo<DiscoverableBlock[]>(() => {
-		return blockTypes
-			.map((block: BlockType) => {
-				const attrs = listAttributeCandidates(
-					block.attributes || {},
-				) as ResponsiveTarget[];
-				return {
-					name: block.name,
-					title: block.title || block.name,
-					attributes: attrs,
-				};
-			})
-			.filter((block: DiscoverableBlock) => block.attributes.length > 0);
-	}, [blockTypes]);
-
-	useEffect(() => {
-		const initial: SelectedMap = {};
-		(getActiveTargets() as ResponsiveTarget[]).forEach(
-			(target: ResponsiveTarget) => {
-				const key = `${target.block}|${target.path}`;
-				initial[key] = target;
-			},
-		);
-		setSelectedMap(initial);
-	}, [isOpen]);
-
-	const filteredBlocks = useMemo<DiscoverableBlock[]>(() => {
-		const term = search.trim().toLowerCase();
-		if (!term) {
-			return discovered;
-		}
-
-		return discovered
-			.map((block: DiscoverableBlock) => {
-				const matchesBlock = matchesSearch(block, term);
-				if (matchesBlock) {
-					return block;
-				}
-
-				const attrMatches = block.attributes.filter((attr: ResponsiveTarget) =>
-					matchesSearch(block, term, attr),
-				);
-				if (!attrMatches.length) {
-					return null;
-				}
-
-				return { ...block, attributes: attrMatches };
-			})
-			.filter((block): block is DiscoverableBlock => Boolean(block));
-	}, [discovered, search]);
+		setSelectedMap(buildSelectedMap(activeTargets));
+		setSearch("");
+		setFeedback(null);
+	}, [activeTargets, isOpen]);
 
 	const selectedCount = Object.keys(selectedMap).length;
 
-	const toggleSelection = (block: any, attr: any, isChecked: boolean) => {
-		const key = `${block.name}|${attr.path}`;
+	const toggleSelection = (
+		block: DiscoverableBlock,
+		attr: ResponsiveTarget,
+		isChecked: boolean,
+	) => {
+		const key = buildSelectionKey(block.name, attr.path);
 		setSelectedMap((current: SelectedMap) => {
 			if (!isChecked) {
 				const next = { ...current };
@@ -203,16 +183,7 @@ export const ResponsiveTargetsModal = () => {
 
 			return {
 				...current,
-				[key]: {
-					block: block.name,
-					path: attr.path,
-					valueKind: attr.valueKind,
-					leafKeys: attr.leafKeys || [],
-					cssProperty: attr.cssProperty || "",
-					styleStrategy: attr.styleStrategy,
-					sourceKind: attr.sourceKind,
-					channel: attr.channel,
-				},
+				[key]: toSelectedTarget(block.name, attr),
 			};
 		});
 	};
@@ -227,7 +198,7 @@ export const ResponsiveTargetsModal = () => {
 
 		try {
 			const response = (await apiFetch({
-				path: runtimeSettings?.restPath || "/responsive-overrides/v1/targets",
+				path: runtimeSettings?.restPath || DEFAULT_TARGETS_REST_PATH,
 				method: "POST",
 				headers: {
 					"X-WP-Nonce": runtimeSettings?.nonce || "",
@@ -238,9 +209,7 @@ export const ResponsiveTargetsModal = () => {
 			const nextTargets = setActiveTargets(
 				response?.targets || [],
 			) as ResponsiveTarget[];
-			if (runtimeSettings?.config) {
-				runtimeSettings.config.targets = nextTargets;
-			}
+			setRuntimeTargets(nextTargets);
 
 			setFeedback({
 				status: "success",
@@ -305,7 +274,7 @@ export const ResponsiveTargetsModal = () => {
 									{block.name}
 								</code>
 								{block.attributes.map((attr: ResponsiveTarget) => {
-									const key = `${block.name}|${attr.path}`;
+									const key = buildSelectionKey(block.name, attr.path);
 									return (
 										<CheckboxControl
 											key={key}
