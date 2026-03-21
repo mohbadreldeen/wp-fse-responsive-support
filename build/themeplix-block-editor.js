@@ -72,10 +72,10 @@ const getColorTargetMeta = path => COLOR_META_MAP[(0,_utils__WEBPACK_IMPORTED_MO
  * Resolve a Gutenberg preset slug or existing color value to a CSS-ready string.
  *
  * Accepted input forms:
- *   "var:preset|color|slug"        → var(--wp--preset--color--slug)
- *   "var(--wp--preset--color--…)"  → returned as-is
+ *   "var:preset|color|slug"        → palette literal (if available), else var(--wp--preset--color--slug)
+ *   "var(--wp--preset--color--…)"  → palette literal (if available), else returned as-is
  *   any CSS color literal           → returned as-is
- *   plain slug e.g. "vivid-red"    → var(--wp--preset--color--vivid-red)
+ *   plain slug e.g. "vivid-red"    → palette literal (if available), else var(--wp--preset--color--vivid-red)
  */
 const resolvePresetColorValue = (rawValue, paletteColors = []) => {
   const value = String(rawValue || "").trim();
@@ -99,434 +99,6 @@ const resolvePresetColorValue = (rawValue, paletteColors = []) => {
   }
   const slug = value.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
   return slug ? `var(--wp--preset--color--${slug})` : value;
-};
-
-/***/ },
-
-/***/ "./src/block-editor/preview-adapter-registry.ts"
-/*!******************************************************!*\
-  !*** ./src/block-editor/preview-adapter-registry.ts ***!
-  \******************************************************/
-(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
-
-__webpack_require__.r(__webpack_exports__);
-/* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   PreviewAdapterRegistry: () => (/* binding */ PreviewAdapterRegistry),
-/* harmony export */   previewAdapterRegistry: () => (/* binding */ previewAdapterRegistry)
-/* harmony export */ });
-/**
- * Registry that maps target paths to preview adapters.
- *
- * Resolution order:
- *   1. Exact-path registered adapters (highest determinism).
- *   2. Catch-all adapters registered with `registerFallback()`.
- * Within each tier adapters are sorted descending by `priority`.
- */
-class PreviewAdapterRegistry {
-  pathMap = new Map();
-  fallbacks = [];
-  register(path, adapter) {
-    const existing = this.pathMap.get(path) ?? [];
-    existing.push(adapter);
-    existing.sort((a, b) => b.priority - a.priority);
-    this.pathMap.set(path, existing);
-  }
-  registerFallback(adapter) {
-    this.fallbacks.push(adapter);
-    this.fallbacks.sort((a, b) => b.priority - a.priority);
-  }
-
-  /**
-   * Return the first adapter that can handle the given target.
-   * Prefers path-specific adapters over fallbacks.
-   */
-  resolve(target) {
-    const pathAdapters = this.pathMap.get(target.path) ?? [];
-    const candidate = pathAdapters.find(a => a.canHandle(target)) ?? this.fallbacks.find(a => a.canHandle(target));
-    return candidate;
-  }
-}
-const previewAdapterRegistry = new PreviewAdapterRegistry();
-
-/***/ },
-
-/***/ "./src/block-editor/preview-adapters/border-geometry.ts"
-/*!**************************************************************!*\
-  !*** ./src/block-editor/preview-adapters/border-geometry.ts ***!
-  \**************************************************************/
-(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
-
-__webpack_require__.r(__webpack_exports__);
-/* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   borderGeometryAdapter: () => (/* binding */ borderGeometryAdapter)
-/* harmony export */ });
-/* harmony import */ var _utils__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
-
-const RADIUS_PROPS = {
-  topLeft: "border-top-left-radius",
-  topRight: "border-top-right-radius",
-  bottomRight: "border-bottom-right-radius",
-  bottomLeft: "border-bottom-left-radius"
-};
-const WIDTH_PROPS = {
-  top: "border-top-width",
-  right: "border-right-width",
-  bottom: "border-bottom-width",
-  left: "border-left-width"
-};
-function expandBorderObject(value, propMap) {
-  const result = {};
-  for (const key of Object.keys(propMap)) {
-    const v = value[key];
-    if (typeof v === "string" || typeof v === "number") {
-      result[propMap[key]] = v;
-    }
-  }
-  return result;
-}
-
-/**
- * Handles style.border.radius → border-*-radius CSS properties (corners).
- *         style.border.width  → border-*-width CSS properties (sides).
- */
-const borderGeometryAdapter = {
-  id: "border-geometry",
-  priority: 80,
-  canHandle(target) {
-    return target.path === "style.border.radius" || target.path === "style.border.width";
-  },
-  resolve(target, value) {
-    if (target.path === "style.border.width" && (typeof value === "string" || typeof value === "number")) {
-      return {
-        cssProperty: "border-width",
-        cssValue: value
-      };
-    }
-    if (!(0,_utils__WEBPACK_IMPORTED_MODULE_0__.isObject)(value)) {
-      return {
-        skip: true
-      };
-    }
-    const propMap = target.path === "style.border.radius" ? RADIUS_PROPS : WIDTH_PROPS;
-    const cssProperties = expandBorderObject(value, propMap);
-    if (!Object.keys(cssProperties).length) {
-      return {
-        skip: true
-      };
-    }
-    return {
-      cssProperties
-    };
-  }
-};
-
-/***/ },
-
-/***/ "./src/block-editor/preview-adapters/color-preset-slug.ts"
-/*!****************************************************************!*\
-  !*** ./src/block-editor/preview-adapters/color-preset-slug.ts ***!
-  \****************************************************************/
-(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
-
-__webpack_require__.r(__webpack_exports__);
-/* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   colorPresetSlugAdapter: () => (/* binding */ colorPresetSlugAdapter)
-/* harmony export */ });
-/* harmony import */ var _color_utils__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../color-utils */ "./src/block-editor/color-utils.ts");
-
-/**
- * Handles textColor → CSS `color` (via preset slug)
- *         backgroundColor → CSS `background-color` (via preset slug)
- *         borderColor → CSS `border-color` (via preset slug)
- *
- * Preset slugs are resolved to var(--wp--preset--color--<slug>).
- * Priority 50 — defers to style-value adapters (priority 100) for the same channel.
- */
-const colorPresetSlugAdapter = {
-  id: "color-preset-slug",
-  priority: 50,
-  canHandle(target) {
-    return target.path === "textColor" || target.path === "backgroundColor" || target.path === "borderColor";
-  },
-  resolve(target, value, resolvedChannels) {
-    if (typeof value !== "string" || !value) {
-      return {
-        skip: true
-      };
-    }
-    const channel = target.path === "textColor" ? "text" : target.path === "borderColor" ? "border" : "background";
-
-    // Yield to a style-value that was already applied for this channel.
-    if (resolvedChannels[channel] === "style-value") {
-      return {
-        skip: true
-      };
-    }
-    const cssProperty = channel === "text" ? "color" : channel === "border" ? "border-color" : "background-color";
-    const cssValue = (0,_color_utils__WEBPACK_IMPORTED_MODULE_0__.resolvePresetColorValue)(value);
-    if (!cssValue) {
-      return {
-        skip: true
-      };
-    }
-    return {
-      cssProperty,
-      cssValue
-    };
-  }
-};
-
-/***/ },
-
-/***/ "./src/block-editor/preview-adapters/color-style-value.ts"
-/*!****************************************************************!*\
-  !*** ./src/block-editor/preview-adapters/color-style-value.ts ***!
-  \****************************************************************/
-(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
-
-__webpack_require__.r(__webpack_exports__);
-/* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   colorStyleValueAdapter: () => (/* binding */ colorStyleValueAdapter)
-/* harmony export */ });
-/**
- * Handles style.color.text → CSS `color`
- *         style.color.background → CSS `background-color`
- *         style.border.color → CSS `border-color`
- *
- * These carry literal color values entered by the user (e.g. #ff0000).
- * Priority 100 — always wins over preset-slug adapters.
- */
-const colorStyleValueAdapter = {
-  id: "color-style-value",
-  priority: 100,
-  canHandle(target) {
-    return target.path === "style.color.text" || target.path === "style.color.background" || target.path === "style.border.color";
-  },
-  resolve(target, value) {
-    if (typeof value !== "string" || !value) {
-      return {
-        skip: true
-      };
-    }
-    const cssProperty = target.path === "style.color.text" ? "color" : target.path === "style.border.color" ? "border-color" : "background-color";
-    return {
-      cssProperty,
-      cssValue: value
-    };
-  }
-};
-
-/***/ },
-
-/***/ "./src/block-editor/preview-adapters/generic-path.ts"
-/*!***********************************************************!*\
-  !*** ./src/block-editor/preview-adapters/generic-path.ts ***!
-  \***********************************************************/
-(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
-
-__webpack_require__.r(__webpack_exports__);
-/* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   genericPathAdapter: () => (/* binding */ genericPathAdapter)
-/* harmony export */ });
-/* harmony import */ var _utils__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
-
-/**
- * Convert a dotted style path to the closest CSS property name.
- * Mirrors the logic previously in getCssPropertyForPath() so behaviour is identical.
- */
-function cssPropertyForPath(path) {
-  const normalizedPath = (0,_utils__WEBPACK_IMPORTED_MODULE_0__.normalizePath)(path);
-  if (!normalizedPath || normalizedPath === "style") {
-    return "";
-  }
-  const segments = normalizedPath.split(".");
-  const leaf = segments[segments.length - 1];
-  if (segments[0] !== "style") {
-    return (0,_utils__WEBPACK_IMPORTED_MODULE_0__.camelToKebab)(leaf);
-  }
-  const namespace = segments[1] || "";
-  if (namespace === "color") {
-    if (leaf === "text") return "color";
-    if (leaf === "background") return "background-color";
-  }
-  if (namespace === "border") {
-    if (leaf === "color") return "border-color";
-  }
-  if (namespace === "spacing" && leaf === "blockGap") {
-    return "gap";
-  }
-  if (namespace === "dimensions") {
-    if (leaf === "minHeight") return "min-height";
-    if (leaf === "aspectRatio") return "aspect-ratio";
-  }
-  return (0,_utils__WEBPACK_IMPORTED_MODULE_0__.camelToKebab)(leaf);
-}
-
-/**
- * Catch-all fallback adapter.
- *
- * Handles any scalar path not claimed by a more specific adapter, using the
- * same path-to-CSS-property conversion that existed previously.
- * Also handles generic objects by expanding via target.leafKeys or object keys.
- *
- * Priority 0 — runs last.
- */
-const genericPathAdapter = {
-  id: "generic-path",
-  priority: 0,
-  canHandle(_target) {
-    return true;
-  },
-  resolve(target, value) {
-    if ((0,_utils__WEBPACK_IMPORTED_MODULE_0__.isObject)(value)) {
-      const obj = value;
-      const leafKeys = Array.isArray(target.leafKeys) && target.leafKeys.length ? target.leafKeys : Object.keys(obj);
-      const cssProperties = {};
-      leafKeys.forEach(leafKey => {
-        if (!Object.prototype.hasOwnProperty.call(obj, leafKey)) {
-          return;
-        }
-        const v = obj[leafKey];
-        if (typeof v !== "string" && typeof v !== "number") {
-          return;
-        }
-        const cssProp = cssPropertyForPath(`${target.path}.${leafKey}`);
-        if (cssProp) {
-          cssProperties[(0,_utils__WEBPACK_IMPORTED_MODULE_0__.cssPropToJsProp)(cssProp)] = v;
-        }
-      });
-      if (Object.keys(cssProperties).length) {
-        return {
-          cssProperties
-        };
-      }
-      return {
-        skip: true
-      };
-    }
-    if (typeof value !== "string" && typeof value !== "number") {
-      return {
-        skip: true
-      };
-    }
-    const cssProperty = cssPropertyForPath(target.path);
-    if (!cssProperty) {
-      return {
-        skip: true
-      };
-    }
-    return {
-      cssProperty,
-      cssValue: value
-    };
-  }
-};
-
-/***/ },
-
-/***/ "./src/block-editor/preview-adapters/index.ts"
-/*!****************************************************!*\
-  !*** ./src/block-editor/preview-adapters/index.ts ***!
-  \****************************************************/
-(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
-
-__webpack_require__.r(__webpack_exports__);
-/* harmony import */ var _preview_adapter_registry__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../preview-adapter-registry */ "./src/block-editor/preview-adapter-registry.ts");
-/* harmony import */ var _color_style_value__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./color-style-value */ "./src/block-editor/preview-adapters/color-style-value.ts");
-/* harmony import */ var _color_preset_slug__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./color-preset-slug */ "./src/block-editor/preview-adapters/color-preset-slug.ts");
-/* harmony import */ var _spacing_object__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./spacing-object */ "./src/block-editor/preview-adapters/spacing-object.ts");
-/* harmony import */ var _border_geometry__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./border-geometry */ "./src/block-editor/preview-adapters/border-geometry.ts");
-/* harmony import */ var _generic_path__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./generic-path */ "./src/block-editor/preview-adapters/generic-path.ts");
-/**
- * Registers all built-in preview adapters into the shared registry.
- * Import this module once (from with-responsive-preview.tsx) to set up
- * the registry before the preview HOC runs.
- */
-
-
-
-
-
-
-
-// --- Exact-path registrations ---
-_preview_adapter_registry__WEBPACK_IMPORTED_MODULE_0__.previewAdapterRegistry.register("style.color.text", _color_style_value__WEBPACK_IMPORTED_MODULE_1__.colorStyleValueAdapter);
-_preview_adapter_registry__WEBPACK_IMPORTED_MODULE_0__.previewAdapterRegistry.register("style.color.background", _color_style_value__WEBPACK_IMPORTED_MODULE_1__.colorStyleValueAdapter);
-_preview_adapter_registry__WEBPACK_IMPORTED_MODULE_0__.previewAdapterRegistry.register("style.border.color", _color_style_value__WEBPACK_IMPORTED_MODULE_1__.colorStyleValueAdapter);
-_preview_adapter_registry__WEBPACK_IMPORTED_MODULE_0__.previewAdapterRegistry.register("textColor", _color_preset_slug__WEBPACK_IMPORTED_MODULE_2__.colorPresetSlugAdapter);
-_preview_adapter_registry__WEBPACK_IMPORTED_MODULE_0__.previewAdapterRegistry.register("backgroundColor", _color_preset_slug__WEBPACK_IMPORTED_MODULE_2__.colorPresetSlugAdapter);
-_preview_adapter_registry__WEBPACK_IMPORTED_MODULE_0__.previewAdapterRegistry.register("borderColor", _color_preset_slug__WEBPACK_IMPORTED_MODULE_2__.colorPresetSlugAdapter);
-_preview_adapter_registry__WEBPACK_IMPORTED_MODULE_0__.previewAdapterRegistry.register("style.spacing.padding", _spacing_object__WEBPACK_IMPORTED_MODULE_3__.spacingObjectAdapter);
-_preview_adapter_registry__WEBPACK_IMPORTED_MODULE_0__.previewAdapterRegistry.register("style.spacing.margin", _spacing_object__WEBPACK_IMPORTED_MODULE_3__.spacingObjectAdapter);
-_preview_adapter_registry__WEBPACK_IMPORTED_MODULE_0__.previewAdapterRegistry.register("style.border.radius", _border_geometry__WEBPACK_IMPORTED_MODULE_4__.borderGeometryAdapter);
-_preview_adapter_registry__WEBPACK_IMPORTED_MODULE_0__.previewAdapterRegistry.register("style.border.width", _border_geometry__WEBPACK_IMPORTED_MODULE_4__.borderGeometryAdapter);
-
-// --- Catch-all fallback ---
-_preview_adapter_registry__WEBPACK_IMPORTED_MODULE_0__.previewAdapterRegistry.registerFallback(_generic_path__WEBPACK_IMPORTED_MODULE_5__.genericPathAdapter);
-
-/***/ },
-
-/***/ "./src/block-editor/preview-adapters/spacing-object.ts"
-/*!*************************************************************!*\
-  !*** ./src/block-editor/preview-adapters/spacing-object.ts ***!
-  \*************************************************************/
-(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
-
-__webpack_require__.r(__webpack_exports__);
-/* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   spacingObjectAdapter: () => (/* binding */ spacingObjectAdapter)
-/* harmony export */ });
-/* harmony import */ var _utils__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../../utils */ "./src/utils/index.ts");
-
-const PADDING_PROPS = {
-  top: "padding-top",
-  right: "padding-right",
-  bottom: "padding-bottom",
-  left: "padding-left"
-};
-const MARGIN_PROPS = {
-  top: "margin-top",
-  right: "margin-right",
-  bottom: "margin-bottom",
-  left: "margin-left"
-};
-function expandSides(value, propMap) {
-  const result = {};
-  for (const side of ["top", "right", "bottom", "left"]) {
-    const v = value[side];
-    if (typeof v === "string" || typeof v === "number") {
-      result[propMap[side]] = v;
-    }
-  }
-  return result;
-}
-
-/**
- * Handles style.spacing.padding and style.spacing.margin object expansion.
- */
-const spacingObjectAdapter = {
-  id: "spacing-object",
-  priority: 80,
-  canHandle(target) {
-    return target.path === "style.spacing.padding" || target.path === "style.spacing.margin";
-  },
-  resolve(target, value) {
-    if (!(0,_utils__WEBPACK_IMPORTED_MODULE_0__.isObject)(value)) {
-      return {
-        skip: true
-      };
-    }
-    const propMap = target.path === "style.spacing.padding" ? PADDING_PROPS : MARGIN_PROPS;
-    const cssProperties = expandSides(value, propMap);
-    if (!Object.keys(cssProperties).length) {
-      return {
-        skip: true
-      };
-    }
-    return {
-      cssProperties
-    };
-  }
 };
 
 /***/ },
@@ -1381,6 +953,9 @@ const buildTopLevelPatch = (original, modified) => {
 const applyLiveAttributeValue = (attributes, path, value) => {
   return (0,_utils__WEBPACK_IMPORTED_MODULE_4__.setValueAtPath)(attributes, path, value);
 };
+const hasPatchChanges = patch => {
+  return Object.keys(patch).length > 0;
+};
 const buildMountSyncAttributes = (attributes, targets) => {
   const nextAttributes = (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(attributes);
   let nextResponsiveStyles = cloneResponsiveStyles(attributes);
@@ -1493,6 +1068,9 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
     const didMountRef = (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_2__.useRef)(false);
     attrsRef.current = attributes;
     const applySyncedAttributes = patch => {
+      if (!hasPatchChanges(patch)) {
+        return;
+      }
       isSyncingRef.current = true;
       attrsRef.current = {
         ...attrsRef.current,
@@ -1505,7 +1083,7 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
     /**
      * Run only once onMount
      */
-    (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_2__.useLayoutEffect)(() => {
+    (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_2__.useEffect)(() => {
       if (didMountRef.current) {
         return;
       }
@@ -1519,20 +1097,23 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
     /**
      * Run after every device preview change
      */
-    (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_2__.useLayoutEffect)(() => {
+    (0,_wordpress_element__WEBPACK_IMPORTED_MODULE_2__.useEffect)(() => {
       if (prevDeviceRef.current === device) {
         return;
       }
       const previousDevice = prevDeviceRef.current;
       prevDeviceRef.current = device;
       const nextAttributes = buildDeviceSyncAttributes(attrsRef.current, targets, previousDevice, device);
+      if (!hasPatchChanges(nextAttributes)) {
+        return;
+      }
       requestAnimationFrame(() => {
         applySyncedAttributes(nextAttributes);
       });
     }, [device]); // eslint-disable-line react-hooks/exhaustive-deps
 
     /**
-     * Run Everytime an attribute changes.
+     * Run every time an attribute changes.
      */
 
     const interceptedSetAttributes = newAttrs => {
@@ -1551,107 +1132,8 @@ const withResponsiveLogic = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_1__.c
       ...props,
       setAttributes: interceptedSetAttributes
     });
-    // return <BlockEdit {...props} />;
   };
 }, "withResponsiveLogic");
-
-/***/ },
-
-/***/ "./src/block-editor/with-responsive-preview.tsx"
-/*!******************************************************!*\
-  !*** ./src/block-editor/with-responsive-preview.tsx ***!
-  \******************************************************/
-(__unused_webpack_module, __webpack_exports__, __webpack_require__) {
-
-__webpack_require__.r(__webpack_exports__);
-/* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   withResponsivePreview: () => (/* binding */ withResponsivePreview)
-/* harmony export */ });
-/* harmony import */ var _wordpress_compose__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! @wordpress/compose */ "@wordpress/compose");
-/* harmony import */ var _wordpress_compose__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(_wordpress_compose__WEBPACK_IMPORTED_MODULE_0__);
-/* harmony import */ var _wordpress_data__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! @wordpress/data */ "@wordpress/data");
-/* harmony import */ var _wordpress_data__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(_wordpress_data__WEBPACK_IMPORTED_MODULE_1__);
-/* harmony import */ var _utils__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ../utils */ "./src/utils/index.ts");
-/* harmony import */ var _color_utils__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./color-utils */ "./src/block-editor/color-utils.ts");
-/* harmony import */ var _targets_store__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./targets-store */ "./src/block-editor/targets-store.ts");
-/* harmony import */ var _responsive_targets__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./responsive-targets */ "./src/block-editor/responsive-targets.ts");
-/* harmony import */ var _responsive_target_families__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ./responsive-target-families */ "./src/block-editor/responsive-target-families.ts");
-/* harmony import */ var _preview_adapter_registry__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! ./preview-adapter-registry */ "./src/block-editor/preview-adapter-registry.ts");
-/* harmony import */ var _preview_adapters_index__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(/*! ./preview-adapters/index */ "./src/block-editor/preview-adapters/index.ts");
-/* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(/*! react/jsx-runtime */ "react/jsx-runtime");
-/* harmony import */ var react_jsx_runtime__WEBPACK_IMPORTED_MODULE_9___default = /*#__PURE__*/__webpack_require__.n(react_jsx_runtime__WEBPACK_IMPORTED_MODULE_9__);
-
-
-
-
-
-
-
-
-
-
-const withResponsivePreview = (0,_wordpress_compose__WEBPACK_IMPORTED_MODULE_0__.createHigherOrderComponent)(BlockListBlock => {
-  return props => {
-    const activeTargets = (0,_targets_store__WEBPACK_IMPORTED_MODULE_4__.useActiveTargets)(props.name);
-    const targets = (0,_responsive_target_families__WEBPACK_IMPORTED_MODULE_6__.expandTrackedTargets)(activeTargets);
-    if (!targets.length) {
-      return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_9__.jsx)(BlockListBlock, {
-        ...props
-      });
-    }
-    const deviceType = (0,_wordpress_data__WEBPACK_IMPORTED_MODULE_1__.useSelect)(select => select("core/editor").getDeviceType?.() || "Desktop", []);
-    const paletteColors = (0,_wordpress_data__WEBPACK_IMPORTED_MODULE_1__.useSelect)(select => select("core/block-editor")?.getSettings?.()?.colors || [], []);
-    const device = (deviceType || "Desktop").toLowerCase();
-    const {
-      attributes
-    } = props;
-    const previewStyles = {};
-    const resolvedChannels = {};
-    targets.forEach(target => {
-      const responsiveValue = (0,_responsive_targets__WEBPACK_IMPORTED_MODULE_5__.getResponsiveValueWithFallback)(attributes, device, target);
-      if (responsiveValue === undefined) {
-        return;
-      }
-      const adapter = _preview_adapter_registry__WEBPACK_IMPORTED_MODULE_7__.previewAdapterRegistry.resolve(target);
-      if (!adapter) {
-        return;
-      }
-      const result = adapter.resolve(target, responsiveValue, resolvedChannels);
-      if ("skip" in result) {
-        return;
-      }
-      if ("cssProperty" in result) {
-        previewStyles[(0,_utils__WEBPACK_IMPORTED_MODULE_2__.cssPropToJsProp)(result.cssProperty)] = typeof result.cssValue === "string" ? (0,_color_utils__WEBPACK_IMPORTED_MODULE_3__.resolvePresetColorValue)(result.cssValue, paletteColors) : result.cssValue;
-        if (target.channel && target.sourceKind) {
-          resolvedChannels[target.channel] = target.sourceKind;
-        }
-        return;
-      }
-      if ("cssProperties" in result) {
-        Object.entries(result.cssProperties).forEach(([prop, val]) => {
-          // Adapter may emit kebab-case or already-camelCase keys.
-          const jsProp = prop.includes("-") ? (0,_utils__WEBPACK_IMPORTED_MODULE_2__.cssPropToJsProp)(prop) : prop;
-          previewStyles[jsProp] = typeof val === "string" ? (0,_color_utils__WEBPACK_IMPORTED_MODULE_3__.resolvePresetColorValue)(val, paletteColors) : val;
-        });
-      }
-    });
-    if (!Object.keys(previewStyles).length) {
-      return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_9__.jsx)(BlockListBlock, {
-        ...props
-      });
-    }
-    return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_9__.jsx)(BlockListBlock, {
-      ...props,
-      wrapperProps: {
-        ...(props.wrapperProps || {}),
-        style: {
-          ...(props.wrapperProps?.style || {}),
-          ...previewStyles
-        }
-      }
-    });
-  };
-}, "withResponsivePreview");
 
 /***/ },
 
@@ -2011,17 +1493,14 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _wordpress_plugins__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(_wordpress_plugins__WEBPACK_IMPORTED_MODULE_1__);
 /* harmony import */ var _responsive_targets_modal__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./responsive-targets-modal */ "./src/block-editor/responsive-targets-modal.tsx");
 /* harmony import */ var _with_responsive_logic__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./with-responsive-logic */ "./src/block-editor/with-responsive-logic.tsx");
-/* harmony import */ var _with_responsive_preview__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./with-responsive-preview */ "./src/block-editor/with-responsive-preview.tsx");
 
 
 
 
-
-(0,_wordpress_plugins__WEBPACK_IMPORTED_MODULE_1__.registerPlugin)('responsive-overrides-settings', {
+(0,_wordpress_plugins__WEBPACK_IMPORTED_MODULE_1__.registerPlugin)("responsive-overrides-settings", {
   render: _responsive_targets_modal__WEBPACK_IMPORTED_MODULE_2__.ResponsiveTargetsModal
 });
-(0,_wordpress_hooks__WEBPACK_IMPORTED_MODULE_0__.addFilter)('editor.BlockEdit', 'responsive-overrides/interceptor', _with_responsive_logic__WEBPACK_IMPORTED_MODULE_3__.withResponsiveLogic);
-(0,_wordpress_hooks__WEBPACK_IMPORTED_MODULE_0__.addFilter)('editor.BlockListBlock', 'responsive-overrides/previewer', _with_responsive_preview__WEBPACK_IMPORTED_MODULE_4__.withResponsivePreview);
+(0,_wordpress_hooks__WEBPACK_IMPORTED_MODULE_0__.addFilter)("editor.BlockEdit", "responsive-overrides/interceptor", _with_responsive_logic__WEBPACK_IMPORTED_MODULE_3__.withResponsiveLogic);
 })();
 
 /******/ })()

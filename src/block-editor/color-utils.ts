@@ -78,10 +78,10 @@ export const getColorTargetMeta = (path: string): ColorTargetMeta =>
  * Resolve a Gutenberg preset slug or existing color value to a CSS-ready string.
  *
  * Accepted input forms:
- *   "var:preset|color|slug"        → var(--wp--preset--color--slug)
- *   "var(--wp--preset--color--…)"  → returned as-is
+ *   "var:preset|color|slug"        → palette literal (if available), else var(--wp--preset--color--slug)
+ *   "var(--wp--preset--color--…)"  → palette literal (if available), else returned as-is
  *   any CSS color literal           → returned as-is
- *   plain slug e.g. "vivid-red"    → var(--wp--preset--color--vivid-red)
+ *   plain slug e.g. "vivid-red"    → palette literal (if available), else var(--wp--preset--color--vivid-red)
  */
 export const resolvePresetColorValue = (
 	rawValue: string,

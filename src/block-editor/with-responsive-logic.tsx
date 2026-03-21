@@ -1,6 +1,6 @@
 import React from "react";
 import { createHigherOrderComponent } from "@wordpress/compose";
-import { useEffect, useLayoutEffect, useRef } from "@wordpress/element";
+import { useLayoutEffect, useRef, useEffect } from "@wordpress/element";
 import { useSelect } from "@wordpress/data";
 import { clone, isObject, getValueAtPath, setValueAtPath } from "../utils";
 import { useActiveTargets } from "./targets-store";
@@ -98,6 +98,10 @@ const applyLiveAttributeValue = (
 	value: any,
 ): Record<string, any> => {
 	return setValueAtPath(attributes, path, value);
+};
+
+const hasPatchChanges = (patch: Record<string, any>): boolean => {
+	return Object.keys(patch).length > 0;
 };
 
 const buildMountSyncAttributes = (
@@ -290,6 +294,10 @@ export const withResponsiveLogic = createHigherOrderComponent(
 			attrsRef.current = attributes;
 
 			const applySyncedAttributes = (patch: Record<string, any>) => {
+				if (!hasPatchChanges(patch)) {
+					return;
+				}
+
 				isSyncingRef.current = true;
 				attrsRef.current = { ...attrsRef.current, ...patch };
 				setAttributes(patch);
@@ -299,7 +307,7 @@ export const withResponsiveLogic = createHigherOrderComponent(
 			/**
 			 * Run only once onMount
 			 */
-			useLayoutEffect(() => {
+			useEffect(() => {
 				if (didMountRef.current) {
 					return;
 				}
@@ -319,7 +327,7 @@ export const withResponsiveLogic = createHigherOrderComponent(
 			/**
 			 * Run after every device preview change
 			 */
-			useLayoutEffect(() => {
+			useEffect(() => {
 				if (prevDeviceRef.current === device) {
 					return;
 				}
@@ -334,13 +342,17 @@ export const withResponsiveLogic = createHigherOrderComponent(
 					device,
 				);
 
+				if (!hasPatchChanges(nextAttributes)) {
+					return;
+				}
+
 				requestAnimationFrame(() => {
 					applySyncedAttributes(nextAttributes);
 				});
 			}, [device]); // eslint-disable-line react-hooks/exhaustive-deps
 
 			/**
-			 * Run Everytime an attribute changes.
+			 * Run every time an attribute changes.
 			 */
 
 			const interceptedSetAttributes = (newAttrs: Record<string, any>) => {
@@ -365,7 +377,6 @@ export const withResponsiveLogic = createHigherOrderComponent(
 			};
 
 			return <BlockEdit {...props} setAttributes={interceptedSetAttributes} />;
-			// return <BlockEdit {...props} />;
 		};
 	},
 	"withResponsiveLogic",

@@ -100,7 +100,7 @@ function ro_sanitize_targets_config( $payload ) {
 		}
 
 		$mapper = isset( $target['mapper'] ) ? sanitize_text_field( (string) $target['mapper'] ) : '';
-		if ( '' !== $mapper && ! in_array( $mapper, array( 'spacingPadding', 'spacingMargin', 'textColor', 'backgroundColor' ), true ) ) {
+		if ( '' !== $mapper && ! in_array( $mapper, array( 'spacingPadding', 'spacingMargin', 'textColor', 'backgroundColor', 'borderColor' ), true ) ) {
 			$mapper = '';
 		}
 
@@ -440,7 +440,21 @@ function ro_get_text_color_declaration( $value, $property = 'color' ) {
 		return array();
 	}
 
-	$value = ro_resolve_preset_value( trim( $value ) );
+	$value = trim( $value );
+	if ( '' === $value ) {
+		return array();
+	}
+
+	if ( preg_match( '/[;{}<>]/', $value ) ) {
+		return array();
+	}
+
+	if ( preg_match( '/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $value ) ) {
+		$value = 'var(--wp--preset--color--' . $value . ')';
+	} else {
+		$value = ro_resolve_preset_value( $value );
+	}
+
 	if ( '' === $value ) {
 		return array();
 	}
@@ -661,12 +675,30 @@ function ro_get_target_declarations( $attrs, $target, $device_data ) {
 	if ( '' === $mapper && 'style.color.background' === $path ) {
 		$mapper = 'backgroundColor';
 	}
+	if ( '' === $mapper && 'style.border.color' === $path ) {
+		$mapper = 'borderColor';
+	}
+	if ( '' === $mapper && 'textColor' === $path ) {
+		$mapper = 'textColor';
+	}
+	if ( '' === $mapper && 'backgroundColor' === $path ) {
+		$mapper = 'backgroundColor';
+	}
+	if ( '' === $mapper && 'borderColor' === $path ) {
+		$mapper = 'borderColor';
+	}
 
 	$path_key = ro_encode_path_key( $path );
 	$value    = $device_data[ $path_key ] ?? null;
 
-	if ( 'textColor' === $mapper || 'backgroundColor' === $mapper ) {
-		$css_property = 'textColor' === $mapper ? 'color' : 'background-color';
+	if ( 'textColor' === $mapper || 'backgroundColor' === $mapper || 'borderColor' === $mapper ) {
+		$css_property = 'color';
+		if ( 'backgroundColor' === $mapper ) {
+			$css_property = 'background-color';
+		}
+		if ( 'borderColor' === $mapper ) {
+			$css_property = 'border-color';
+		}
 		return ro_get_text_color_declaration( $value, $css_property );
 	}
 
