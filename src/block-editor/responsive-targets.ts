@@ -1,4 +1,5 @@
 import { clone, encodePathKey, isObject } from "../utils";
+import { getColorAliasPath } from "./color-utils";
 import type { ResponsiveTarget } from "./types";
 
 type WriteNormalizationContext = {
@@ -26,32 +27,22 @@ class ResponsiveWriteAdapterRegistry {
 	}
 }
 
-const COLOR_ALIAS_CONFLICTS: Record<string, string[]> = {
-	"style.color.background": ["backgroundColor"],
-	backgroundColor: ["style.color.background"],
-	"style.color.text": ["textColor"],
-	textColor: ["style.color.text"],
-	"style.border.color": ["borderColor"],
-	borderColor: ["style.border.color"],
-};
-
 const colorAliasWriteAdapter: ResponsiveWriteAdapter = {
 	id: "color-alias-write-adapter",
 	priority: 100,
 	canHandle(target: ResponsiveTarget) {
-		return Object.prototype.hasOwnProperty.call(
-			COLOR_ALIAS_CONFLICTS,
-			target.path,
-		);
+		return !!getColorAliasPath(target.path);
 	},
 	normalize({ devicePayload, target }: WriteNormalizationContext) {
-		const conflictingPaths = COLOR_ALIAS_CONFLICTS[target.path] || [];
-		conflictingPaths.forEach((path) => {
-			const key = encodePathKey(path);
-			if (devicePayload[key] !== undefined) {
-				delete devicePayload[key];
-			}
-		});
+		const siblingAliasPath = getColorAliasPath(target.path);
+		if (!siblingAliasPath) {
+			return;
+		}
+
+		const key = encodePathKey(siblingAliasPath);
+		if (devicePayload[key] !== undefined) {
+			delete devicePayload[key];
+		}
 	},
 };
 
@@ -71,19 +62,6 @@ const getDeviceFallbackChain = (device: string): string[] => {
 
 	return ["desktop"];
 };
-
-const PRESET_TO_STYLE_ALIAS: Record<string, string> = {
-	backgroundColor: "style.color.background",
-	textColor: "style.color.text",
-	borderColor: "style.border.color",
-};
-
-const STYLE_TO_PRESET_ALIAS: Record<string, string> = Object.fromEntries(
-	Object.entries(PRESET_TO_STYLE_ALIAS).map(([presetPath, stylePath]) => [
-		stylePath,
-		presetPath,
-	]),
-);
 
 export const setResponsiveValue = (
 	attributes: Record<string, any>,
@@ -174,8 +152,7 @@ export const getResponsiveValueWithFallback = (
 	const devicesToCheck = includeCurrentDevice
 		? fallbackChain
 		: fallbackChain.slice(1);
-	const siblingAliasPath =
-		PRESET_TO_STYLE_ALIAS[target.path] || STYLE_TO_PRESET_ALIAS[target.path];
+	const siblingAliasPath = getColorAliasPath(target.path);
 	const siblingAliasTarget = siblingAliasPath
 		? {
 				...target,

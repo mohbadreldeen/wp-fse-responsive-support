@@ -1,6 +1,6 @@
 import React from "react";
 import { createHigherOrderComponent } from "@wordpress/compose";
-import { useLayoutEffect, useRef, useEffect } from "@wordpress/element";
+import { useRef, useEffect } from "@wordpress/element";
 import { useSelect } from "@wordpress/data";
 import { clone, isObject, getValueAtPath, setValueAtPath } from "../utils";
 import { useActiveTargets } from "./targets-store";
@@ -90,14 +90,6 @@ const buildTopLevelPatch = (
 	}
 
 	return patch;
-};
-
-const applyLiveAttributeValue = (
-	attributes: Record<string, any>,
-	path: string,
-	value: any,
-): Record<string, any> => {
-	return setValueAtPath(attributes, path, value);
 };
 
 const hasPatchChanges = (patch: Record<string, any>): boolean => {
@@ -193,11 +185,7 @@ const buildDeviceSyncAttributes = (
 		const normalizedCurrentDeviceValue =
 			currentDeviceValue === undefined ? undefined : clone(currentDeviceValue);
 
-		applyLiveAttributeValue(
-			nextAttributes,
-			target.path,
-			normalizedCurrentDeviceValue,
-		);
+		setValueAtPath(nextAttributes, target.path, normalizedCurrentDeviceValue);
 	});
 
 	nextAttributes.responsiveStyles = nextResponsiveStyles;

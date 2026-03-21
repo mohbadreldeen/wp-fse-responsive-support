@@ -7,8 +7,19 @@ import {
 import { getColorTargetMeta } from "./color-utils";
 import { ResponsiveTarget } from "./types";
 
-const DEVICE_KEYS = ["desktop", "tablet", "mobile"];
 const DEFAULT_TARGETS: string[] = [];
+const STYLE_STRATEGY_BY_PATH: Record<
+	string,
+	ResponsiveTarget["styleStrategy"]
+> = {
+	"style.spacing.padding": "padding",
+	"style.spacing.margin": "margin",
+	"style.border.radius": "border-radius",
+	"style.border.width": "border-width",
+	"style.border.color": "border-color",
+	"style.border.style": "border-style",
+};
+
 const DEFAULT_STYLE_TARGETS = [
 	{
 		path: "style.spacing.padding",
@@ -71,31 +82,7 @@ const DEFAULT_STYLE_TARGETS = [
 const getStyleStrategyForPath = (
 	path: string,
 ): ResponsiveTarget["styleStrategy"] => {
-	if (path === "style.spacing.padding") {
-		return "padding";
-	}
-
-	if (path === "style.spacing.margin") {
-		return "margin";
-	}
-
-	if (path === "style.border.radius") {
-		return "border-radius";
-	}
-
-	if (path === "style.border.width") {
-		return "border-width";
-	}
-
-	if (path === "style.border.color") {
-		return "border-color";
-	}
-
-	if (path === "style.border.style") {
-		return "border-style";
-	}
-
-	return undefined;
+	return STYLE_STRATEGY_BY_PATH[path];
 };
 
 export const normalizeTargets = (rawTargets: any) => {

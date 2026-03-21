@@ -11,6 +11,22 @@ type PaletteColor = {
 	color?: string;
 };
 
+export const COLOR_CHANNEL_STYLE_PATHS: Record<ResponsiveColorChannel, string> =
+	{
+		text: "style.color.text",
+		background: "style.color.background",
+		border: "style.border.color",
+	};
+
+export const COLOR_CHANNEL_PRESET_PATHS: Record<
+	ResponsiveColorChannel,
+	string
+> = {
+	text: "textColor",
+	background: "backgroundColor",
+	border: "borderColor",
+};
+
 const COLOR_META_MAP: Record<string, ColorTargetMeta> = {
 	"style.color.text": { sourceKind: "style-value", channel: "text" },
 	"style.color.background": {
@@ -26,6 +42,28 @@ const COLOR_META_MAP: Record<string, ColorTargetMeta> = {
 const GENERIC_META: ColorTargetMeta = {
 	sourceKind: "generic",
 	channel: undefined,
+};
+
+export const getColorAliasPath = (path: string): string | undefined => {
+	const normalizedPath = normalizePath(path);
+	const colorMeta = COLOR_META_MAP[normalizedPath];
+
+	if (!colorMeta?.channel) {
+		return undefined;
+	}
+
+	const stylePath = COLOR_CHANNEL_STYLE_PATHS[colorMeta.channel];
+	const presetPath = COLOR_CHANNEL_PRESET_PATHS[colorMeta.channel];
+
+	if (normalizedPath === stylePath) {
+		return presetPath;
+	}
+
+	if (normalizedPath === presetPath) {
+		return stylePath;
+	}
+
+	return undefined;
 };
 
 const extractPresetSlug = (rawValue: string): string => {

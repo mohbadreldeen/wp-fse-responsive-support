@@ -1,13 +1,3 @@
-const SUPPORTED_PATH_TO_MAPPER: Record<string, string> = {
-	"style.spacing.padding": "spacingPadding",
-	"style.spacing.margin": "spacingMargin",
-	"style.color.text": "textColor",
-	"style.color.background": "backgroundColor",
-	"style.border.radius": "borderRadius",
-	"style.border.width": "borderWidth",
-	"style.border.color": "borderColor",
-};
-
 /**
  *
  * @param {string} value: The camelCase string to convert to kebab-case.
@@ -59,10 +49,6 @@ export const clone = (value: Object | any[]) =>
 export const encodePathKey = (path: string) => path.replace(/\./g, "__");
 
 export const normalizePath = (path: string) => String(path || "").trim();
-
-export const getMapperForPath = (path: string) => {
-	return SUPPORTED_PATH_TO_MAPPER[normalizePath(path)] || "";
-};
 
 export const getCssPropertyForPath = (path: string) => {
 	const normalizedPath = normalizePath(path);
@@ -153,59 +139,4 @@ export const setValueAtPath = (
 	});
 
 	return object;
-};
-
-export const setResponsiveValue = (
-	attributes: Record<string, any>,
-	device: string,
-	target: any,
-	value: any,
-): Record<string, any> => {
-	const nextResponsiveStyles = clone(attributes?.responsiveStyles || {});
-	if (!isObject(nextResponsiveStyles[device])) {
-		nextResponsiveStyles[device] = {};
-	}
-
-	const pathKey = encodePathKey(target.path);
-
-	if (target.valueKind === "object" && isObject(value)) {
-		const existingValue = isObject(nextResponsiveStyles[device][pathKey])
-			? nextResponsiveStyles[device][pathKey]
-			: {};
-		const nextValue = { ...existingValue };
-
-		if (Array.isArray(target.leafKeys) && target.leafKeys.length) {
-			target.leafKeys.forEach((key: string) => {
-				if (Object.prototype.hasOwnProperty.call(value, key)) {
-					nextValue[key] = clone(value[key]);
-				}
-			});
-		} else {
-			Object.assign(nextValue, clone(value));
-		}
-
-		nextResponsiveStyles[device][pathKey] = nextValue;
-	} else {
-		nextResponsiveStyles[device][pathKey] = clone(value);
-	}
-
-	return nextResponsiveStyles;
-};
-
-export const getResponsiveValue = (
-	attributes: Record<string, any>,
-	device: string,
-	target: any,
-): any => {
-	const payload = attributes?.responsiveStyles?.[device];
-	if (!isObject(payload)) {
-		return undefined;
-	}
-
-	const pathKey = encodePathKey(target.path);
-	if (payload[pathKey] !== undefined) {
-		return payload[pathKey];
-	}
-
-	return undefined;
 };

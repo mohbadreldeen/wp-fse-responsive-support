@@ -10,11 +10,24 @@
 
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   COLOR_CHANNEL_PRESET_PATHS: () => (/* binding */ COLOR_CHANNEL_PRESET_PATHS),
+/* harmony export */   COLOR_CHANNEL_STYLE_PATHS: () => (/* binding */ COLOR_CHANNEL_STYLE_PATHS),
+/* harmony export */   getColorAliasPath: () => (/* binding */ getColorAliasPath),
 /* harmony export */   getColorTargetMeta: () => (/* binding */ getColorTargetMeta),
 /* harmony export */   resolvePresetColorValue: () => (/* binding */ resolvePresetColorValue)
 /* harmony export */ });
 /* harmony import */ var _utils__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../utils */ "./src/utils/index.ts");
 
+const COLOR_CHANNEL_STYLE_PATHS = {
+  text: "style.color.text",
+  background: "style.color.background",
+  border: "style.border.color"
+};
+const COLOR_CHANNEL_PRESET_PATHS = {
+  text: "textColor",
+  background: "backgroundColor",
+  border: "borderColor"
+};
 const COLOR_META_MAP = {
   "style.color.text": {
     sourceKind: "style-value",
@@ -44,6 +57,22 @@ const COLOR_META_MAP = {
 const GENERIC_META = {
   sourceKind: "generic",
   channel: undefined
+};
+const getColorAliasPath = path => {
+  const normalizedPath = (0,_utils__WEBPACK_IMPORTED_MODULE_0__.normalizePath)(path);
+  const colorMeta = COLOR_META_MAP[normalizedPath];
+  if (!colorMeta?.channel) {
+    return undefined;
+  }
+  const stylePath = COLOR_CHANNEL_STYLE_PATHS[colorMeta.channel];
+  const presetPath = COLOR_CHANNEL_PRESET_PATHS[colorMeta.channel];
+  if (normalizedPath === stylePath) {
+    return presetPath;
+  }
+  if (normalizedPath === presetPath) {
+    return stylePath;
+  }
+  return undefined;
 };
 const extractPresetSlug = rawValue => {
   const value = String(rawValue || "").trim();
@@ -118,30 +147,15 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _utils__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ../utils */ "./src/utils/index.ts");
 
 
-const COLOR_CHANNEL_STYLE_PATHS = {
-  text: "style.color.text",
-  background: "style.color.background",
-  border: "style.border.color"
-};
-const COLOR_CHANNEL_PRESET_PATHS = {
-  text: "textColor",
-  background: "backgroundColor",
-  border: "borderColor"
-};
 const getColorFamilyPaths = target => {
-  if (!target.channel) {
+  const siblingAliasPath = (0,_color_utils__WEBPACK_IMPORTED_MODULE_0__.getColorAliasPath)(target.path);
+  if (!siblingAliasPath) {
     return [target.path];
   }
-  const stylePath = COLOR_CHANNEL_STYLE_PATHS[target.channel];
-  const presetPath = COLOR_CHANNEL_PRESET_PATHS[target.channel];
-  if (!stylePath || !presetPath) {
-    return [target.path];
-  }
-  return Array.from(new Set([stylePath, presetPath]));
+  return Array.from(new Set([target.path, siblingAliasPath]));
 };
 const getSiblingAliasPath = target => {
-  const familyPaths = getColorFamilyPaths(target);
-  return familyPaths.find(path => path !== target.path);
+  return (0,_color_utils__WEBPACK_IMPORTED_MODULE_0__.getColorAliasPath)(target.path);
 };
 const getTrackedTargetPriority = target => {
   if (target.sourceKind === "preset-slug") {
@@ -469,6 +483,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   setResponsiveValue: () => (/* binding */ setResponsiveValue)
 /* harmony export */ });
 /* harmony import */ var _utils__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../utils */ "./src/utils/index.ts");
+/* harmony import */ var _color_utils__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./color-utils */ "./src/block-editor/color-utils.ts");
+
 
 class ResponsiveWriteAdapterRegistry {
   adapters = [];
@@ -480,31 +496,24 @@ class ResponsiveWriteAdapterRegistry {
     return this.adapters.find(adapter => adapter.canHandle(target));
   }
 }
-const COLOR_ALIAS_CONFLICTS = {
-  "style.color.background": ["backgroundColor"],
-  backgroundColor: ["style.color.background"],
-  "style.color.text": ["textColor"],
-  textColor: ["style.color.text"],
-  "style.border.color": ["borderColor"],
-  borderColor: ["style.border.color"]
-};
 const colorAliasWriteAdapter = {
   id: "color-alias-write-adapter",
   priority: 100,
   canHandle(target) {
-    return Object.prototype.hasOwnProperty.call(COLOR_ALIAS_CONFLICTS, target.path);
+    return !!(0,_color_utils__WEBPACK_IMPORTED_MODULE_1__.getColorAliasPath)(target.path);
   },
   normalize({
     devicePayload,
     target
   }) {
-    const conflictingPaths = COLOR_ALIAS_CONFLICTS[target.path] || [];
-    conflictingPaths.forEach(path => {
-      const key = (0,_utils__WEBPACK_IMPORTED_MODULE_0__.encodePathKey)(path);
-      if (devicePayload[key] !== undefined) {
-        delete devicePayload[key];
-      }
-    });
+    const siblingAliasPath = (0,_color_utils__WEBPACK_IMPORTED_MODULE_1__.getColorAliasPath)(target.path);
+    if (!siblingAliasPath) {
+      return;
+    }
+    const key = (0,_utils__WEBPACK_IMPORTED_MODULE_0__.encodePathKey)(siblingAliasPath);
+    if (devicePayload[key] !== undefined) {
+      delete devicePayload[key];
+    }
   }
 };
 const responsiveWriteAdapterRegistry = new ResponsiveWriteAdapterRegistry();
@@ -519,12 +528,6 @@ const getDeviceFallbackChain = device => {
   }
   return ["desktop"];
 };
-const PRESET_TO_STYLE_ALIAS = {
-  backgroundColor: "style.color.background",
-  textColor: "style.color.text",
-  borderColor: "style.border.color"
-};
-const STYLE_TO_PRESET_ALIAS = Object.fromEntries(Object.entries(PRESET_TO_STYLE_ALIAS).map(([presetPath, stylePath]) => [stylePath, presetPath]));
 const setResponsiveValue = (attributes, device, target, value) => {
   const nextResponsiveStyles = (0,_utils__WEBPACK_IMPORTED_MODULE_0__.clone)(attributes?.responsiveStyles || {});
   if (!(0,_utils__WEBPACK_IMPORTED_MODULE_0__.isObject)(nextResponsiveStyles[device])) {
@@ -587,7 +590,7 @@ const getResponsiveValue = (attributes, device, target) => {
 const getResponsiveValueWithFallback = (attributes, device, target, includeCurrentDevice = true) => {
   const fallbackChain = getDeviceFallbackChain(device);
   const devicesToCheck = includeCurrentDevice ? fallbackChain : fallbackChain.slice(1);
-  const siblingAliasPath = PRESET_TO_STYLE_ALIAS[target.path] || STYLE_TO_PRESET_ALIAS[target.path];
+  const siblingAliasPath = (0,_color_utils__WEBPACK_IMPORTED_MODULE_1__.getColorAliasPath)(target.path);
   const siblingAliasTarget = siblingAliasPath ? {
     ...target,
     path: siblingAliasPath
@@ -627,8 +630,15 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _color_utils__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./color-utils */ "./src/block-editor/color-utils.ts");
 
 
-const DEVICE_KEYS = ["desktop", "tablet", "mobile"];
 const DEFAULT_TARGETS = [];
+const STYLE_STRATEGY_BY_PATH = {
+  "style.spacing.padding": "padding",
+  "style.spacing.margin": "margin",
+  "style.border.radius": "border-radius",
+  "style.border.width": "border-width",
+  "style.border.color": "border-color",
+  "style.border.style": "border-style"
+};
 const DEFAULT_STYLE_TARGETS = [{
   path: "style.spacing.padding",
   valueKind: "object",
@@ -680,25 +690,7 @@ const DEFAULT_STYLE_TARGETS = [{
   channel: "border"
 }];
 const getStyleStrategyForPath = path => {
-  if (path === "style.spacing.padding") {
-    return "padding";
-  }
-  if (path === "style.spacing.margin") {
-    return "margin";
-  }
-  if (path === "style.border.radius") {
-    return "border-radius";
-  }
-  if (path === "style.border.width") {
-    return "border-width";
-  }
-  if (path === "style.border.color") {
-    return "border-color";
-  }
-  if (path === "style.border.style") {
-    return "border-style";
-  }
-  return undefined;
+  return STYLE_STRATEGY_BY_PATH[path];
 };
 const normalizeTargets = rawTargets => {
   if (!Array.isArray(rawTargets) || !rawTargets.length) {
@@ -999,9 +991,6 @@ const buildTopLevelPatch = (original, modified) => {
   }
   return patch;
 };
-const applyLiveAttributeValue = (attributes, path, value) => {
-  return (0,_utils__WEBPACK_IMPORTED_MODULE_4__.setValueAtPath)(attributes, path, value);
-};
 const hasPatchChanges = patch => {
   return Object.keys(patch).length > 0;
 };
@@ -1051,7 +1040,7 @@ const buildDeviceSyncAttributes = (attributes, targets, previousDevice, device) 
       responsiveStyles: nextResponsiveStyles
     }, device, target);
     const normalizedCurrentDeviceValue = currentDeviceValue === undefined ? undefined : (0,_utils__WEBPACK_IMPORTED_MODULE_4__.clone)(currentDeviceValue);
-    applyLiveAttributeValue(nextAttributes, target.path, normalizedCurrentDeviceValue);
+    (0,_utils__WEBPACK_IMPORTED_MODULE_4__.setValueAtPath)(nextAttributes, target.path, normalizedCurrentDeviceValue);
   });
   nextAttributes.responsiveStyles = nextResponsiveStyles;
   return buildTopLevelPatch(attributes, nextAttributes);
@@ -1199,24 +1188,11 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   cssPropToJsProp: () => (/* binding */ cssPropToJsProp),
 /* harmony export */   encodePathKey: () => (/* binding */ encodePathKey),
 /* harmony export */   getCssPropertyForPath: () => (/* binding */ getCssPropertyForPath),
-/* harmony export */   getMapperForPath: () => (/* binding */ getMapperForPath),
-/* harmony export */   getResponsiveValue: () => (/* binding */ getResponsiveValue),
 /* harmony export */   getValueAtPath: () => (/* binding */ getValueAtPath),
 /* harmony export */   isObject: () => (/* binding */ isObject),
 /* harmony export */   normalizePath: () => (/* binding */ normalizePath),
-/* harmony export */   setResponsiveValue: () => (/* binding */ setResponsiveValue),
 /* harmony export */   setValueAtPath: () => (/* binding */ setValueAtPath)
 /* harmony export */ });
-const SUPPORTED_PATH_TO_MAPPER = {
-  "style.spacing.padding": "spacingPadding",
-  "style.spacing.margin": "spacingMargin",
-  "style.color.text": "textColor",
-  "style.color.background": "backgroundColor",
-  "style.border.radius": "borderRadius",
-  "style.border.width": "borderWidth",
-  "style.border.color": "borderColor"
-};
-
 /**
  *
  * @param {string} value: The camelCase string to convert to kebab-case.
@@ -1259,9 +1235,6 @@ const clone = value => isObject(value) || Array.isArray(value) ? JSON.parse(JSON
  */
 const encodePathKey = path => path.replace(/\./g, "__");
 const normalizePath = path => String(path || "").trim();
-const getMapperForPath = path => {
-  return SUPPORTED_PATH_TO_MAPPER[normalizePath(path)] || "";
-};
 const getCssPropertyForPath = path => {
   const normalizedPath = normalizePath(path);
   if (!normalizedPath || normalizedPath === "style") {
@@ -1332,43 +1305,6 @@ const setValueAtPath = (object, path, value) => {
     cursor = cursor[segment];
   });
   return object;
-};
-const setResponsiveValue = (attributes, device, target, value) => {
-  const nextResponsiveStyles = clone(attributes?.responsiveStyles || {});
-  if (!isObject(nextResponsiveStyles[device])) {
-    nextResponsiveStyles[device] = {};
-  }
-  const pathKey = encodePathKey(target.path);
-  if (target.valueKind === "object" && isObject(value)) {
-    const existingValue = isObject(nextResponsiveStyles[device][pathKey]) ? nextResponsiveStyles[device][pathKey] : {};
-    const nextValue = {
-      ...existingValue
-    };
-    if (Array.isArray(target.leafKeys) && target.leafKeys.length) {
-      target.leafKeys.forEach(key => {
-        if (Object.prototype.hasOwnProperty.call(value, key)) {
-          nextValue[key] = clone(value[key]);
-        }
-      });
-    } else {
-      Object.assign(nextValue, clone(value));
-    }
-    nextResponsiveStyles[device][pathKey] = nextValue;
-  } else {
-    nextResponsiveStyles[device][pathKey] = clone(value);
-  }
-  return nextResponsiveStyles;
-};
-const getResponsiveValue = (attributes, device, target) => {
-  const payload = attributes?.responsiveStyles?.[device];
-  if (!isObject(payload)) {
-    return undefined;
-  }
-  const pathKey = encodePathKey(target.path);
-  if (payload[pathKey] !== undefined) {
-    return payload[pathKey];
-  }
-  return undefined;
 };
 
 /***/ },

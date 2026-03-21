@@ -114,19 +114,7 @@ function ro_sanitize_targets_config( $payload ) {
 		}
 
 		if ( '' === $style_strategy && 'object' === $value_kind ) {
-			if ( 'style.spacing.padding' === $path ) {
-				$style_strategy = 'padding';
-			} elseif ( 'style.spacing.margin' === $path ) {
-				$style_strategy = 'margin';
-			} elseif ( 'style.border.radius' === $path ) {
-				$style_strategy = 'border-radius';
-			} elseif ( 'style.border.width' === $path ) {
-				$style_strategy = 'border-width';
-			} elseif ( 'style.border.color' === $path ) {
-				$style_strategy = 'border-color';
-			} elseif ( 'style.border.style' === $path ) {
-				$style_strategy = 'border-style';
-			}
+			$style_strategy = ro_get_style_strategy_for_path( $path );
 		}
 
 		if ( 'scalar' === $value_kind && '' === $css_property ) {
@@ -387,79 +375,22 @@ function ro_resolve_preset_value( $value ) {
 }
 
 /**
- * Build a safe CSS spacing declaration map from a device entry in responsiveStyles.
- *
- * Expected format: { "padding": { "top": "20px", "right": "10px", … } }
- *
- * @param array $device_data Device payload from responsiveStyles.
- * @return array<string, string>
+	* Infer an object style strategy from a known target path.
+	*
+	* @param string $path Target path.
+	* @return string
  */
-function ro_get_device_spacing_declarations( $device_data ) {
-	if ( ! is_array( $device_data ) ) {
-		return array();
-	}
+function ro_get_style_strategy_for_path( $path ) {
+	$strategies = array(
+		'style.spacing.padding' => 'padding',
+		'style.spacing.margin'  => 'margin',
+		'style.border.radius'   => 'border-radius',
+		'style.border.width'    => 'border-width',
+		'style.border.color'    => 'border-color',
+		'style.border.style'    => 'border-style',
+	);
 
-	$declarations = array();
-
-	// Handle padding
-	$padding = $device_data['padding'] ?? array();
-	if ( is_array( $padding ) ) {
-		$property_map = array(
-			'top'    => 'padding-top',
-			'right'  => 'padding-right',
-			'bottom' => 'padding-bottom',
-			'left'   => 'padding-left',
-		);
-
-		foreach ( $property_map as $side => $css_property ) {
-			if ( ! isset( $padding[ $side ] ) || ! is_string( $padding[ $side ] ) ) {
-				continue;
-			}
-
-			$value = ro_resolve_preset_value( trim( $padding[ $side ] ) );
-			if ( '' === $value ) {
-				continue;
-			}
-
-			// Allow only safe CSS length values and var() custom properties.
-			if ( ! preg_match( '/^-?(?:\\d+|\\d*\\.\\d+)(?:px|em|rem|vw|vh|%)$|^0$|^var\(--[\w-]+/', $value ) ) {
-				continue;
-			}
-
-			$declarations[ $css_property ] = $value;
-		}
-	}
-
-	// Handle margin
-	$margin = $device_data['margin'] ?? array();
-	if ( is_array( $margin ) ) {
-		$property_map = array(
-			'top'    => 'margin-top',
-			'right'  => 'margin-right',
-			'bottom' => 'margin-bottom',
-			'left'   => 'margin-left',
-		);
-
-		foreach ( $property_map as $side => $css_property ) {
-			if ( ! isset( $margin[ $side ] ) || ! is_string( $margin[ $side ] ) ) {
-				continue;
-			}
-
-			$value = ro_resolve_preset_value( trim( $margin[ $side ] ) );
-			if ( '' === $value ) {
-				continue;
-			}
-
-			// Allow only safe CSS length values and var() custom properties.
-			if ( ! preg_match( '/^-?(?:\\d+|\\d*\\.\\d+)(?:px|em|rem|vw|vh|%)$|^0$|^var\(--[\w-]+/', $value ) ) {
-				continue;
-			}
-
-			$declarations[ $css_property ] = $value;
-		}
-	}
-
-	return $declarations;
+	return $strategies[ $path ] ?? '';
 }
 
 /**
@@ -502,59 +433,22 @@ function ro_get_text_color_declaration( $value, $property = 'color' ) {
 }
 
 /**
- * Convert camelCase token to kebab-case.
- *
- * @param string $value Token.
- * @return string
- */
-function ro_camel_to_kebab( $value ) {
-	return strtolower( preg_replace( '/([a-z0-9])([A-Z])/', '$1-$2', (string) $value ) );
-}
+	* Resolve the sibling alias path for a color target.
+	*
+	* @param string $path Target path.
+	* @return string
+	*/
+function ro_get_color_alias_path( $path ) {
+	$aliases = array(
+		'style.color.text'       => 'textColor',
+		'textColor'              => 'style.color.text',
+		'style.color.background' => 'backgroundColor',
+		'backgroundColor'        => 'style.color.background',
+		'style.border.color'     => 'borderColor',
+		'borderColor'            => 'style.border.color',
+	);
 
-/**
- * Resolve a target path to a CSS property.
- *
- * @param string $path Dot path.
- * @return string
- */
-function ro_get_css_property_for_path( $path ) {
-	$path = trim( (string) $path );
-	if ( '' === $path || 'style' === $path ) {
-		return '';
-	}
-
-	$segments = explode( '.', $path );
-	$leaf     = $segments[ count( $segments ) - 1 ];
-
-	if ( 'style' !== ( $segments[0] ?? '' ) ) {
-		return ro_camel_to_kebab( $leaf );
-	}
-
-	$namespace = $segments[1] ?? '';
-
-	if ( 'color' === $namespace ) {
-		if ( 'text' === $leaf ) {
-			return 'color';
-		}
-		if ( 'background' === $leaf ) {
-			return 'background-color';
-		}
-	}
-
-	if ( 'spacing' === $namespace && 'blockGap' === $leaf ) {
-		return 'gap';
-	}
-
-	if ( 'dimensions' === $namespace ) {
-		if ( 'minHeight' === $leaf ) {
-			return 'min-height';
-		}
-		if ( 'aspectRatio' === $leaf ) {
-			return 'aspect-ratio';
-		}
-	}
-
-	return ro_camel_to_kebab( $leaf );
+	return $aliases[ $path ] ?? '';
 }
 
 /**
@@ -596,125 +490,13 @@ function ro_sanitize_generic_css_value( $value ) {
  * @param array  $target Target config.
  * @return array<string, string>
  */
-function ro_get_generic_target_declarations( $path, $value, $target ) {
-	$declarations = array();
-
-	if ( is_array( $value ) ) {
-		if ( 'style.border.radius' === $path ) {
-			$corner_map = array(
-				'topLeft'     => 'border-top-left-radius',
-				'topRight'    => 'border-top-right-radius',
-				'bottomRight' => 'border-bottom-right-radius',
-				'bottomLeft'  => 'border-bottom-left-radius',
-			);
-
-			foreach ( $corner_map as $key => $property ) {
-				if ( ! array_key_exists( $key, $value ) ) {
-					continue;
-				}
-
-				$sanitized = ro_sanitize_generic_css_value( $value[ $key ] );
-				if ( '' !== $sanitized ) {
-					$declarations[ $property ] = $sanitized;
-				}
-			}
-
-			return $declarations;
-		}
-
-		if ( 'style.border.width' === $path || 'style.border.color' === $path || 'style.border.style' === $path ) {
-			$side_map = array(
-				'top'    => '-top-',
-				'right'  => '-right-',
-				'bottom' => '-bottom-',
-				'left'   => '-left-',
-			);
-			$leaf     = explode( '.', $path );
-			$suffix   = ro_camel_to_kebab( $leaf[ count( $leaf ) - 1 ] );
-
-			foreach ( $side_map as $key => $middle ) {
-				if ( ! array_key_exists( $key, $value ) ) {
-					continue;
-				}
-
-				$sanitized = ro_sanitize_generic_css_value( $value[ $key ] );
-				if ( '' !== $sanitized ) {
-					$declarations[ 'border' . $middle . $suffix ] = $sanitized;
-				}
-			}
-
-			return $declarations;
-		}
-
-		$leaf_keys = array();
-		if ( isset( $target['leafKeys'] ) && is_array( $target['leafKeys'] ) && ! empty( $target['leafKeys'] ) ) {
-			$leaf_keys = $target['leafKeys'];
-		} else {
-			$leaf_keys = array_keys( $value );
-		}
-
-		foreach ( $leaf_keys as $leaf_key ) {
-			if ( ! array_key_exists( $leaf_key, $value ) ) {
-				continue;
-			}
-
-			$property = ro_get_css_property_for_path( $path . '.' . $leaf_key );
-			if ( '' === $property ) {
-				continue;
-			}
-
-			$sanitized = ro_sanitize_generic_css_value( $value[ $leaf_key ] );
-			if ( '' !== $sanitized ) {
-				$declarations[ $property ] = $sanitized;
-			}
-		}
-
-		return $declarations;
-	}
-
-	$property = ro_get_css_property_for_path( $path );
-	if ( '' === $property ) {
-		return array();
-	}
-
-	$sanitized = ro_sanitize_generic_css_value( $value );
-	if ( '' === $sanitized ) {
-		return array();
-	}
-
-	return array( $property => $sanitized );
-}
-
 /**
- * Build declarations for object targets using an internal strategy.
- *
- * @param string $strategy Strategy key.
- * @param mixed  $value Object value from responsiveStyles.
- * @return array<string, string>
- */
-function ro_get_object_strategy_declarations( $strategy, $value ) {
-	if ( ! is_array( $value ) ) {
-		if ( 'border-color' === $strategy ) {
-			return ro_get_text_color_declaration( $value, 'border-color' );
-		}
-
-		if ( 'border-width' === $strategy || 'border-style' === $strategy ) {
-			$property = 'border-width';
-			if ( 'border-style' === $strategy ) {
-				$property = 'border-style';
-			}
-
-			$sanitized = ro_sanitize_generic_css_value( $value );
-			if ( '' === $sanitized ) {
-				return array();
-			}
-
-			return array( $property => $sanitized );
-		}
-
-		return array();
-	}
-
+	* Return the canonical leaf-to-property map for a style strategy.
+	*
+	* @param string $strategy Strategy key.
+	* @return array<string, string>
+	*/
+function ro_get_style_strategy_leaf_map( $strategy ) {
 	$maps = array(
 		'padding' => array(
 			'top'    => 'padding-top',
@@ -754,18 +536,66 @@ function ro_get_object_strategy_declarations( $strategy, $value ) {
 		),
 	);
 
-	if ( ! isset( $maps[ $strategy ] ) ) {
+	return $maps[ $strategy ] ?? array();
+}
+
+/**
+	* Determine whether a CSS property should use color sanitization.
+	*
+	* @param string $property_name CSS property name.
+	* @return bool
+	*/
+function ro_is_color_property( $property_name ) {
+	return in_array(
+		$property_name,
+		array( 'color', 'background-color', 'border-color', 'border-top-color', 'border-right-color', 'border-bottom-color', 'border-left-color' ),
+		true
+	);
+}
+
+/**
+ * Build declarations for object targets using an internal strategy.
+ *
+ * @param string $strategy Strategy key.
+ * @param mixed  $value Object value from responsiveStyles.
+ * @return array<string, string>
+ */
+function ro_get_object_strategy_declarations( $strategy, $value ) {
+	if ( ! is_array( $value ) ) {
+		if ( 'border-color' === $strategy ) {
+			return ro_get_text_color_declaration( $value, 'border-color' );
+		}
+
+		if ( 'border-width' === $strategy || 'border-style' === $strategy ) {
+			$property = 'border-width';
+			if ( 'border-style' === $strategy ) {
+				$property = 'border-style';
+			}
+
+			$sanitized = ro_sanitize_generic_css_value( $value );
+			if ( '' === $sanitized ) {
+				return array();
+			}
+
+			return array( $property => $sanitized );
+		}
+
+		return array();
+	}
+
+	$leaf_map = ro_get_style_strategy_leaf_map( $strategy );
+	if ( empty( $leaf_map ) ) {
 		return array();
 	}
 
 	$declarations = array();
-	foreach ( $maps[ $strategy ] as $leaf_key => $property_name ) {
+	foreach ( $leaf_map as $leaf_key => $property_name ) {
 		if ( ! array_key_exists( $leaf_key, $value ) ) {
 			continue;
 		}
 
 		$raw_leaf_value = $value[ $leaf_key ];
-		if ( in_array( $property_name, array( 'color', 'background-color', 'border-color', 'border-top-color', 'border-right-color', 'border-bottom-color', 'border-left-color' ), true ) ) {
+		if ( ro_is_color_property( $property_name ) ) {
 			$color_declaration = ro_get_text_color_declaration( $raw_leaf_value, $property_name );
 			if ( ! empty( $color_declaration[ $property_name ] ) ) {
 				$declarations[ $property_name ] = $color_declaration[ $property_name ];
@@ -785,31 +615,18 @@ function ro_get_object_strategy_declarations( $strategy, $value ) {
 /**
  * Build a declaration list for a configured responsive target.
  *
- * @param array $attrs  Block attributes.
  * @param array $target Target config.
  * @param array $device_data Device payload.
  * @return array<string, string>
  */
-function ro_get_target_declarations( $attrs, $target, $device_data ) {
+function ro_get_target_declarations( $target, $device_data ) {
 	$path         = isset( $target['path'] ) ? (string) $target['path'] : '';
 	$value_kind   = isset( $target['valueKind'] ) ? (string) $target['valueKind'] : 'scalar';
 	$css_property = isset( $target['cssProperty'] ) ? trim( (string) $target['cssProperty'] ) : '';
 	$style_strategy = isset( $target['styleStrategy'] ) ? trim( (string) $target['styleStrategy'] ) : '';
 
 	if ( '' === $style_strategy && 'object' === $value_kind ) {
-		if ( 'style.spacing.padding' === $path ) {
-			$style_strategy = 'padding';
-		} elseif ( 'style.spacing.margin' === $path ) {
-			$style_strategy = 'margin';
-		} elseif ( 'style.border.radius' === $path ) {
-			$style_strategy = 'border-radius';
-		} elseif ( 'style.border.width' === $path ) {
-			$style_strategy = 'border-width';
-		} elseif ( 'style.border.color' === $path ) {
-			$style_strategy = 'border-color';
-		} elseif ( 'style.border.style' === $path ) {
-			$style_strategy = 'border-style';
-		}
+		$style_strategy = ro_get_style_strategy_for_path( $path );
 	}
 
 	$path_key = ro_encode_path_key( $path );
@@ -818,21 +635,7 @@ function ro_get_target_declarations( $attrs, $target, $device_data ) {
 	// Color aliases can be stored in either style path or preset slug path,
 	// depending on what the user edited in the block controls.
 	if ( null === $value ) {
-		$alias_path = '';
-		if ( 'style.color.text' === $path ) {
-			$alias_path = 'textColor';
-		} elseif ( 'style.color.background' === $path ) {
-			$alias_path = 'backgroundColor';
-		} elseif ( 'style.border.color' === $path ) {
-			$alias_path = 'borderColor';
-		} elseif ( 'textColor' === $path ) {
-			$alias_path = 'style.color.text';
-		} elseif ( 'backgroundColor' === $path ) {
-			$alias_path = 'style.color.background';
-		} elseif ( 'borderColor' === $path ) {
-			$alias_path = 'style.border.color';
-		}
-
+		$alias_path = ro_get_color_alias_path( $path );
 		if ( '' !== $alias_path ) {
 			$alias_key = ro_encode_path_key( $alias_path );
 			if ( array_key_exists( $alias_key, $device_data ) ) {
@@ -842,7 +645,7 @@ function ro_get_target_declarations( $attrs, $target, $device_data ) {
 	}
 
 	if ( 'object' === $value_kind ) {
-		if ( ! is_array( $value ) || '' === $style_strategy ) {
+		if ( '' === $style_strategy ) {
 			return array();
 		}
 
@@ -906,15 +709,15 @@ function ro_render_responsive_group_spacing( $block_content, $block ) {
 	foreach ( $targets as $target ) {
 		$desktop_declarations = array_merge(
 			$desktop_declarations,
-			ro_get_target_declarations( $attrs, $target, $attrs['responsiveStyles']['desktop'] ?? array() )
+			ro_get_target_declarations( $target, $attrs['responsiveStyles']['desktop'] ?? array() )
 		);
 		$tablet_declarations = array_merge(
 			$tablet_declarations,
-			ro_get_target_declarations( $attrs, $target, $attrs['responsiveStyles']['tablet'] ?? array() )
+			ro_get_target_declarations( $target, $attrs['responsiveStyles']['tablet'] ?? array() )
 		);
 		$mobile_declarations = array_merge(
 			$mobile_declarations,
-			ro_get_target_declarations( $attrs, $target, $attrs['responsiveStyles']['mobile'] ?? array() )
+			ro_get_target_declarations( $target, $attrs['responsiveStyles']['mobile'] ?? array() )
 		);
 	}
 
